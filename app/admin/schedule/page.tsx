@@ -66,6 +66,13 @@ export default function AdminSchedulePage() {
   const [rescheduleData, setRescheduleData] = useState({ date: '', category: '', time: '' });
   const [formEndDate, setFormEndDate] = useState(''); // 날짜 범위 등록용 종료일
 
+  // 텔레그램 봇 상태
+  const [telegramChatId, setTelegramChatId] = useState<string>('');
+  const [telegramInput, setTelegramInput] = useState<string>('');
+  const [botStatus, setBotStatus] = useState<'idle' | 'connected' | 'error'>('idle');
+  const [showBotSetup, setShowBotSetup] = useState(false);
+  const telegramChatIdRef = React.useRef<string>('');
+
   // Settings
   const categories = ["호핑투어", "해녀체험", "스노클링", "체험 다이빙", "자격증 교육"];
   const paymentOptions = ["네이버", "마이리얼트립", "현금결제", "카드결제"];
@@ -140,6 +147,59 @@ export default function AdminSchedulePage() {
   const bookingsRef = React.useRef(bookings);
   useEffect(() => { bookingsRef.current = bookings; }, [bookings]);
 
+  // localStorage에서 chat_id 초기 로드
+  useEffect(() => {
+    const stored = localStorage.getItem('ecodivers_telegram_chat_id');
+    if (stored) {
+      setTelegramChatId(stored);
+      setTelegramInput(stored);
+      telegramChatIdRef.current = stored;
+      setBotStatus('connected');
+    }
+  }, []);
+
+  // chat_id 수동 저장
+  const saveTelegramChatId = async () => {
+    const id = telegramInput.trim();
+    if (!id) return;
+    localStorage.setItem('ecodivers_telegram_chat_id', id);
+    setTelegramChatId(id);
+    telegramChatIdRef.current = id;
+    setBotStatus('connected');
+
+    // 연결 테스트 메시지 발송
+    const token = process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN;
+    if (token) {
+      try {
+        const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: id,
+            text: '✅ <b>에코다이버스 봇 연결 완료!</b>\n이제부터 예약 알림과 일정 변경 소식을 받을 수 있습니다.\n하단 [📅 내일 일정] 버튼을 눌러보세요.',
+            parse_mode: 'HTML',
+            reply_markup: {
+              keyboard: [[{ text: '📅 내일 일정' }]],
+              resize_keyboard: true,
+              persistent: true
+            }
+          })
+        });
+        const data = await res.json();
+        if (!data.ok) {
+          alert('전송 실패: Chat ID를 확인해주세요.\n' + (data.description || ''));
+          setBotStatus('error');
+        } else {
+          setShowBotSetup(false);
+          alert('텔레그램 연결 완료! 메시지를 확인하세요.');
+        }
+      } catch {
+        alert('네트워크 오류가 발생했습니다.');
+        setBotStatus('error');
+      }
+    }
+  };
+
   useEffect(() => {
     let updateOffset = 0;
     
@@ -203,11 +263,12 @@ export default function AdminSchedulePage() {
 
     const pollTelegram = async () => {
       const token = process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN;
-      if (!token) return;
+      if (!token) { console.warn('[TelegramBot] Token not found'); return; }
 
       try {
         const res = await fetch(`https://api.telegram.org/bot${token}/getUpdates?offset=${updateOffset}&timeout=5`);
         const data = await res.json();
+        console.log('[TelegramBot] Poll result:', data.ok, 'updates:', data.result?.length);
         if (data.ok && data.result.length > 0) {
           for (const update of data.result) {
             updateOffset = update.update_id + 1;
@@ -216,7 +277,11 @@ export default function AdminSchedulePage() {
               const text = message.text.trim();
               const chatId = message.chat.id.toString();
               
+              console.log('[TelegramBot] Received:', text, 'from chatId:', chatId);
               localStorage.setItem('ecodivers_telegram_chat_id', chatId);
+              setTelegramChatId(chatId);
+              telegramChatIdRef.current = chatId;
+              setBotStatus('connected');
 
               if (text === '/start') {
                 await sendTelegramMessage(chatId, '안녕하세요! 에코다이버스 알림 봇입니다.\n하단 메뉴의 <b>[📅 내일 일정]</b> 버튼을 누르시면 내일 예약 현황을 알려드립니다.', true);
@@ -227,10 +292,12 @@ export default function AdminSchedulePage() {
           }
         }
       } catch (e) {
-        // ignore network errors
+        console.error('[TelegramBot] Poll error:', e);
       }
     };
 
+    // 즉시 한 번 폴링
+    pollTelegram();
     const interval = setInterval(pollTelegram, 5000);
     
     // 7 PM Daily Summary Check
@@ -240,14 +307,14 @@ export default function AdminSchedulePage() {
         const lastSent = localStorage.getItem('ecodivers_telegram_last_summary');
         const todayStr = format(now, "yyyy-MM-dd");
         if (lastSent !== todayStr) {
-          const chatId = localStorage.getItem('ecodivers_telegram_chat_id');
+          const chatId = telegramChatIdRef.current || localStorage.getItem('ecodivers_telegram_chat_id');
           if (chatId) {
             localStorage.setItem('ecodivers_telegram_last_summary', todayStr);
             sendTomorrowSchedule(chatId);
           }
         }
       }
-    }, 30000); // Check every 30 seconds
+    }, 30000);
 
     return () => {
       clearInterval(interval);
@@ -378,7 +445,7 @@ export default function AdminSchedulePage() {
         window.alert("저장되었습니다.");
         
         // 텔레그램 알림 발송
-        const chatId = localStorage.getItem('ecodivers_telegram_chat_id');
+        const chatId = telegramChatIdRef.current || localStorage.getItem('ecodivers_telegram_chat_id');
         const token = process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN;
         if (chatId && token) {
           let dateText = editingBooking.date;
@@ -445,7 +512,7 @@ export default function AdminSchedulePage() {
       console.log("Firestore: Booking deleted successfully");
       await saveBackup({ ...editingBooking, action: "delete" });
       
-      const chatId = localStorage.getItem('ecodivers_telegram_chat_id');
+      const chatId = telegramChatIdRef.current || localStorage.getItem('ecodivers_telegram_chat_id');
       const token = process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN;
       if (chatId && token) {
         const msg = `🗑 <b>일정 삭제됨</b>\n${editingBooking.date} ${editingBooking.time}\n${editingBooking.name}님 (${editingBooking.pax}명) - ${editingBooking.category}`;
@@ -492,7 +559,7 @@ export default function AdminSchedulePage() {
       setIsModalOpen(false);
       alert(rescheduleMode ? '일정이 변경되었습니다.' : '일정이 취소되었습니다.');
       
-      const chatId = localStorage.getItem('ecodivers_telegram_chat_id');
+      const chatId = telegramChatIdRef.current || localStorage.getItem('ecodivers_telegram_chat_id');
       const token = process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN;
       if (chatId && token) {
         const msg = rescheduleMode 
@@ -526,6 +593,61 @@ export default function AdminSchedulePage() {
           <div>
             <h1 className="text-3xl font-extrabold text-blue-900 drop-shadow-sm">관리자 전용 일정표</h1>
             <p className="text-sm text-gray-500 mt-2 font-medium">네이버/마이리얼트립 실시간 예약 연동 대시보드</p>
+
+            {/* 텔레그램 봇 상태 표시 */}
+            <div className="mt-3 flex items-center gap-3">
+              <button
+                onClick={() => setShowBotSetup(!showBotSetup)}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold transition ${
+                  botStatus === 'connected'
+                    ? 'bg-green-100 text-green-700 border border-green-200'
+                    : 'bg-gray-100 text-gray-500 border border-gray-200 hover:bg-blue-50 hover:text-blue-600'
+                }`}
+              >
+                <span className={`w-2 h-2 rounded-full ${botStatus === 'connected' ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
+                {botStatus === 'connected' ? `✈️ 텔레그램 연결됨` : '📱 텔레그램 봇 설정'}
+              </button>
+              {botStatus === 'connected' && telegramChatId && (
+                <span className="text-xs text-gray-400">Chat ID: {telegramChatId}</span>
+              )}
+            </div>
+
+            {/* 텔레그램 봇 설정 패널 */}
+            {showBotSetup && (
+              <div className="mt-3 p-4 bg-blue-50 border border-blue-200 rounded-xl max-w-sm">
+                <p className="text-xs font-bold text-blue-800 mb-2">📱 텔레그램 봇 연결 설정</p>
+                <ol className="text-xs text-blue-700 space-y-1 mb-3 list-decimal list-inside">
+                  <li>텔레그램에서 <b>@EcodiversBot</b> 채팅 열기</li>
+                  <li><b>/start</b> 전송</li>
+                  <li>아래에서 <b>내 Chat ID 확인</b> 클릭</li>
+                  <li>Chat ID 입력 후 <b>저장 &amp; 테스트</b></li>
+                </ol>
+                <div className="flex gap-2 mb-2">
+                  <input
+                    type="text"
+                    value={telegramInput}
+                    onChange={e => setTelegramInput(e.target.value)}
+                    placeholder="Chat ID 입력 (예: 123456789)"
+                    className="flex-1 px-3 py-1.5 border border-blue-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-400"
+                  />
+                  <button
+                    onClick={saveTelegramChatId}
+                    className="px-3 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 transition whitespace-nowrap"
+                  >
+                    저장 &amp; 테스트
+                  </button>
+                </div>
+                <a
+                  href={`https://api.telegram.org/bot${process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN}/getUpdates`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-blue-600 underline"
+                >
+                  👉 내 Chat ID 확인하기 (새 탭에서 열림)
+                </a>
+                <p className="text-xs text-gray-500 mt-1">→ "from":{'{'}"id": <b>이 숫자</b>{'}'} 가 내 Chat ID입니다</p>
+              </div>
+            )}
           </div>
           <div className="flex flex-wrap gap-3 bg-white p-2 rounded-xl border border-gray-200 shadow-sm">
             <span className="text-sm font-bold text-gray-700 flex items-center px-2">시스템 관리</span>
