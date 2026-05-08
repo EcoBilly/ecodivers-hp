@@ -1,21 +1,21 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import Header from "../components/Header";
-import Footer from "../components/Footer";
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+import Header from "@/components/Header";
+import Footer from "@/components/Footer";
+import ChatbotWidget from "@/components/ChatbotWidget";
 
 export const metadata: Metadata = {
-  title: "제주도 에코다이버스 | 스쿠버, 프리다이빙, 해녀체험",
-  description: "제주도 최고의 다이빙 센터 에코다이버스. 스쿠버, 프리다이빙, 펀다이빙, 호핑투어, 해녀체험을 언제든 예약하세요.",
+  title: "에코다이버스 | 제주 스쿠버 다이빙·프리다이빙·해녀체험 전문",
+  description:
+    "제주도 No.1 다이빙 센터 에코다이버스. 스쿠버 다이빙, 프리다이빙, 해녀체험, 호핑투어, 펀다이빙 예약. PADI·AIDA 공인. 당일예약 가능.",
+  keywords:
+    "제주 다이빙, 제주 스쿠버, 프리다이빙, 해녀체험, 호핑투어, 에코다이버스, PADI, AIDA",
+  openGraph: {
+    title: "에코다이버스 | 제주 스쿠버 다이빙·프리다이빙 전문",
+    description: "제주도 최북단 청정 바다에서 즐기는 다이빙 경험",
+    locale: "ko_KR",
+    type: "website",
+  },
 };
 
 export default function RootLayout({
@@ -24,12 +24,23 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
+    <html lang="ko">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link
+          rel="preconnect"
+          href="https://fonts.gstatic.com"
+          crossOrigin="anonymous"
+        />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&family=Montserrat:wght@300;400;600;700;800;900&display=swap"
+          rel="stylesheet"
+        />
+      </head>
+      <body className="antialiased">
         <Header />
-        <main>{children}</main>
+        {children}
+        <ChatbotWidget />
         <Footer />
       </body>
     </html>

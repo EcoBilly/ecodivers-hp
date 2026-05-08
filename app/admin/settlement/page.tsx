@@ -7,17 +7,16 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 export default function SettlementPage() {
+  const router = useRouter();
   const [isClient, setIsClient] = useState(false);
   const [loading, setLoading] = useState(true);
-  
+
   useEffect(() => {
     setIsClient(true);
   }, []);
 
-  if (!isClient) return null;
-  const router = useRouter();
-
   useEffect(() => {
+    if (!isClient) return;
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         const role = await getUserRole(user);
@@ -26,14 +25,14 @@ export default function SettlementPage() {
           router.push("/admin/schedule");
         }
       } else {
-        router.push("/admin/login");
+        router.push("/login?redirect=/admin/settlement");
       }
       setLoading(false);
     });
     return () => unsubscribe();
-  }, [router]);
+  }, [router, isClient]);
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+  if (!isClient || loading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
 
   return (
     <div className="min-h-screen bg-gray-50 pt-24 pb-12 px-4 md:px-8">

@@ -1,19 +1,20 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { auth } from "@/lib/authService";
 import { db } from "@/lib/firebase";
-import { signInWithEmailAndPassword } from "firebase/auth";
+import { signInWithEmailAndPassword, onAuthStateChanged } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
-export default function AdminLoginPage() {
+function LoginForm() {
   const [isClient, setIsClient] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     setIsClient(true);
@@ -28,72 +29,68 @@ export default function AdminLoginPage() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (typeof window !== "undefined") {
-      console.log("Login button clicked");
-    }
     setLoading(true);
     setError("");
 
     try {
-      if (!auth) {
-        throw new Error("Firebase Auth not initialized");
-      }
+      if (!auth) throw new Error("Firebase Auth not initialized");
 
       const loginEmail = (email.trim() === "admin" ? "admin@ecodivers.com" : email.trim());
-      console.log("Step 1: Attempting login with email:", loginEmail);
-
-      // Attempt login with timeout
       const userCredential = await withTimeout(signInWithEmailAndPassword(auth, loginEmail, password.trim()));
-      console.log("Step 2: Login successful, UID:", userCredential.user.uid);
 
-      // Auto-grant admin role (Non-blocking: if it fails, just ignore and proceed)
-      if (userCredential.user && userCredential.user.uid === "JPtfQFrkGRVzqmejQc28DDlZC0K2") {
-        console.log("Step 3: (Async) Auto-granting admin role for UID:", userCredential.user.uid);
-        // Do not await this, just fire and forget, or wrap in try-catch
+      // Auto-grant admin role (Non-blocking)
+      if (userCredential.user && userCredential.user.uid === "BOSaRDC3BDNfrvsyCoyan7bVfnx1") {
         setDoc(doc(db, "users", userCredential.user.uid), {
           role: "admin",
           email: userCredential.user.email,
           updatedAt: new Date().toISOString()
         }, { merge: true }).catch(err => {
-          console.warn("Step 3 (Async failure): Firestore permission denied or error:", err.message);
+          console.warn("Firestore role update failed:", err.message);
         });
       }
 
-      console.log("Step 4: Redirecting to admin schedule...");
-      router.push("/admin/schedule/");
+      const redirectTo = searchParams.get("redirect") || "/admin/schedule";
+      router.push(redirectTo);
     } catch (err: any) {
-      console.error("Login catch block triggered:", err);
+      console.error("Login error full:", err);
       let message = "로그인에 실패했습니다. 이메일과 비밀번호를 확인해주세요.";
-
       if (err.message === "Timeout") {
-        message = "서버 응답 시간이 초과되었습니다. 인터넷 연결을 확인해 주세요.";
-      } else if (err.code === 'auth/wrong-password') {
-        message = "비밀번호가 틀렸습니다. 다시 확인해주세요.";
+        message = "서버 응답 시간이 초과되었습니다.";
+      } else if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+        message = "이메일 또는 비밀번호가 틀렸습니다.";
       } else if (err.code === 'auth/user-not-found') {
-        message = "존재하지 않는 관리자 계정입니다.";
+        message = "존재하지 않는 계정입니다. Firebase에서 계정을 먼저 생성해주세요.";
       } else if (err.code === 'auth/invalid-email') {
         message = "이메일 형식이 올바르지 않습니다.";
       } else if (err.code === 'auth/too-many-requests') {
-        message = "너무 많은 로그인 시도가 있었습니다. 잠시 후 다시 시도해주세요.";
+        message = "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.";
       } else if (err.code === 'auth/network-request-failed') {
-        message = "네트워크 연결에 실패했습니다. 방화벽이나 백신 설정을 확인해 주세요.";
+        message = "네트워크 연결에 실패했습니다. 인터넷 연결을 확인해주세요.";
+      } else if (err.code) {
+        message = `오류 코드: ${err.code}`;
       }
-
       setError(message);
-      if (typeof window !== "undefined") {
-        window.alert("로그인 에러: " + message + " (" + (err.code || err.message) + ")");
+      // Fallback: alert so it's always visible
+      if (!document.querySelector('[data-error]')) {
+        // error state will render, no need for alert
       }
     } finally {
       setLoading(false);
     }
   };
 
+  if (!isClient) return (
+    <div className="min-h-screen bg-[#0a1628] flex items-center justify-center">
+      <div className="text-white text-sm animate-pulse">로딩 중...</div>
+    </div>
+  );
+
   return (
-    <div className="min-h-screen bg-gray-900 flex items-center justify-center px-4">
+    <div className="min-h-screen bg-[#0a1628] flex items-center justify-center px-4">
       <div className="max-w-md w-full bg-white rounded-3xl p-8 shadow-2xl">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-black text-blue-900 mb-2">EcoDivers Admin <span className="text-xs text-blue-400">v1.1</span></h1>
-          <p className="text-gray-500 font-medium">관리자 시스템 접속을 위해 로그인해주세요.</p>
+          <h1 className="text-3xl font-black text-blue-900 mb-2">EcoDivers <span className="text-xs text-blue-400">로그인</span></h1>
+          <p className="text-gray-500 font-medium">시스템 접속을 위해 로그인해주세요.</p>
         </div>
 
         <form onSubmit={handleLogin} className="space-y-6" id="admin-login-form">
@@ -126,7 +123,11 @@ export default function AdminLoginPage() {
             />
           </div>
 
-          {error && <p className="text-red-500 text-sm font-bold text-center">{error}</p>}
+          {error && (
+            <div data-error className="bg-red-50 border border-red-200 rounded-xl p-3">
+              <p className="text-red-600 text-sm font-bold text-center">{error}</p>
+            </div>
+          )}
 
           <button
             type="submit"
@@ -144,5 +145,17 @@ export default function AdminLoginPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#0a1628] flex items-center justify-center">
+        <div className="text-white text-sm animate-pulse">로딩 중...</div>
+      </div>
+    }>
+      <LoginForm />
+    </Suspense>
   );
 }

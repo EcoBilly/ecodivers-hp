@@ -3,99 +3,307 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 
+const navItems = [
+  { label: "다이빙", href: "#diving" },
+  { label: "해양체험", href: "#experience" },
+  { label: "교육/자격증", href: "#education" },
+  { label: "패키지", href: "#packages" },
+  { label: "커뮤니티", href: "#community" },
+  { label: "에코소개", href: "#about" },
+];
+
 export default function Header() {
   const [isOpen, setIsOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => {
-      setIsScrolled(window.scrollY > 50);
+      const scrollContainer = document.querySelector(".scroll-snap-container");
+      if (scrollContainer) {
+        setIsScrolled(scrollContainer.scrollTop > 80);
+      } else {
+        setIsScrolled(window.scrollY > 80);
+      }
     };
-    window.addEventListener("scroll", handleScroll);
-    return () => window.removeEventListener("scroll", handleScroll);
+
+    const scrollContainer = document.querySelector(".scroll-snap-container");
+    if (scrollContainer) {
+      scrollContainer.addEventListener("scroll", handleScroll);
+      return () => scrollContainer.removeEventListener("scroll", handleScroll);
+    } else {
+      window.addEventListener("scroll", handleScroll);
+      return () => window.removeEventListener("scroll", handleScroll);
+    }
   }, []);
 
   return (
-    <header
-      className={`fixed top-0 left-0 w-full z-50 transition-all duration-300 ${
-        isScrolled ? "bg-white/95 backdrop-blur-md shadow-md py-2" : "bg-transparent py-4"
-      }`}
-    >
-      <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
-        {/* Logo (Left Fixed) */}
-        <Link
-          href="/"
-          className={`text-2xl md:text-3xl font-black tracking-tighter transition-colors duration-300 ${
-            isScrolled ? "text-blue-600" : "text-white drop-shadow-md"
+    <>
+      <header
+        className={`fixed top-0 left-0 w-full z-50 transition-all duration-500 ${
+          isScrolled
+            ? "bg-white shadow-[0_2px_30px_rgba(0,0,0,0.08)] py-0"
+            : "bg-transparent py-0"
+        }`}
+      >
+        {/* Top Utility Bar - 모바일에서 슬림하게 */}
+        <div
+          className={`border-b transition-all duration-500 ${
+            isScrolled
+              ? "border-gray-100 py-1"
+              : "border-white/10 py-1"
           }`}
         >
-          EcoDivers.
-        </Link>
-
-        {/* Desktop Menu (Center-Right) */}
-        <nav className="hidden lg:flex items-center gap-10">
-          <div className={`flex gap-8 font-bold text-[15px] transition-colors duration-300 ${
-            isScrolled ? "text-gray-700" : "text-white drop-shadow-md"
-          }`}>
-            <Link href="#products" className="hover:text-blue-500">상품안내</Link>
-            <Link href="#booking" className="hover:text-blue-500">예약</Link>
-            <Link href="#community" className="hover:text-blue-500">커뮤니티</Link>
-            <Link href="#about" className="hover:text-blue-500">소개</Link>
-          </div>
-
-          {/* Utilities (Right) */}
-          <div className={`flex items-center gap-6 border-l pl-8 ml-4 transition-all duration-300 ${
-            isScrolled ? "border-gray-200 text-gray-500" : "border-white/30 text-white/90"
-          }`}>
-            <div className="flex gap-3 text-[12px] font-bold">
-              <button className="hover:text-blue-400">KOR</button>
-              <span className="opacity-30">|</span>
-              <button className="hover:text-blue-400">ENG</button>
-            </div>
-            <Link
-              href="/admin/login"
-              className={`text-[13px] font-bold px-4 py-1.5 rounded-full border transition-all ${
-                isScrolled 
-                ? "border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white" 
-                : "border-white text-white hover:bg-white hover:text-blue-600"
+          <div className="max-w-[1400px] mx-auto px-4 md:px-6 flex items-center justify-between">
+            {/* 주소 - 데스크탑에서만 표시 */}
+            <div
+              className={`hidden md:flex items-center gap-6 text-[11px] font-medium tracking-wider transition-colors ${
+                isScrolled ? "text-gray-500" : "text-white/70"
               }`}
             >
-              로그인
-            </Link>
-          </div>
-        </nav>
+              <span className="flex items-center gap-1.5">
+                <svg className="w-3 h-3 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+                </svg>
+                제주특별자치도 서귀포시 칠십리로 145
+              </span>
+              <span className="flex items-center gap-1.5">
+                <svg className="w-3 h-3 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/>
+                </svg>
+                010-7414-3373
+              </span>
+            </div>
 
-        {/* Hamburger (Mobile) */}
-        <button
-          className={`lg:hidden transition-colors duration-300 ${
-            isScrolled ? "text-gray-900" : "text-white drop-shadow-md"
-          } focus:outline-none`}
-          onClick={() => setIsOpen(!isOpen)}
+            {/* 모바일 - 전화번호만 */}
+            <a
+              href="tel:01074143373"
+              className={`flex md:hidden items-center gap-1.5 text-[11px] font-medium tracking-wider transition-colors ${
+                isScrolled ? "text-gray-500" : "text-white/70"
+              }`}
+            >
+              <svg className="w-3 h-3 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/>
+              </svg>
+              010-7414-3373
+            </a>
+
+            {/* 우측 링크들 */}
+            <div
+              className={`flex items-center gap-3 text-[11px] font-bold tracking-wider transition-colors ${
+                isScrolled ? "text-gray-500" : "text-white/70"
+              }`}
+            >
+              {/* 데스크탑에서만 INSTAGRAM, KAKAOTALK 표시 */}
+              <a
+                href="https://www.instagram.com/ecodivers_jeju"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hidden md:block hover:text-[#006BD6] transition-colors py-1"
+              >
+                INSTAGRAM
+              </a>
+              <span className="hidden md:block opacity-30">|</span>
+              <a
+                href="http://pf.kakao.com/_xgpxexnxj"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hidden md:block hover:text-[#006BD6] transition-colors py-1"
+              >
+                KAKAOTALK
+              </a>
+              <span className="hidden md:block opacity-30">|</span>
+              <Link
+                href="/login"
+                className="hover:text-[#006BD6] transition-colors py-1"
+              >
+                LOGIN
+              </Link>
+              <span className="opacity-30">|</span>
+              <Link
+                href="/admin/schedule"
+                className="hover:text-[#006BD6] transition-colors py-1 pr-1 md:pr-0"
+              >
+                ADMIN
+              </Link>
+            </div>
+          </div>
+        </div>
+
+        {/* Main Navigation */}
+        <div className="max-w-[1400px] mx-auto px-4 md:px-6">
+          <div className="flex items-center justify-between h-14 md:h-16">
+            {/* Logo */}
+            <Link href="/" className="flex items-center gap-2 group">
+              <div
+                className={`transition-all duration-500 ${
+                  isScrolled ? "text-[#006BD6]" : "text-white"
+                }`}
+              >
+                <div className="flex items-baseline gap-1">
+                  <span
+                    className="font-en text-lg md:text-xl font-black tracking-tight leading-none"
+                    style={{ fontFamily: "'Montserrat', sans-serif" }}
+                  >
+                    ECO
+                  </span>
+                  <span
+                    className="font-en text-lg md:text-xl font-black tracking-tight leading-none opacity-70"
+                    style={{ fontFamily: "'Montserrat', sans-serif" }}
+                  >
+                    DIVERS
+                  </span>
+                </div>
+                <div
+                  className={`text-[7px] md:text-[8px] tracking-[0.4em] uppercase font-medium mt-0.5 transition-colors ${
+                    isScrolled ? "text-gray-400" : "text-white/50"
+                  }`}
+                  style={{ fontFamily: "'Montserrat', sans-serif" }}
+                >
+                  JEJU DIVE CENTER
+                </div>
+              </div>
+            </Link>
+
+            {/* Desktop Nav */}
+            <nav className="hidden lg:flex items-center gap-0">
+              {navItems.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`relative px-5 py-5 text-[13px] font-bold tracking-wide transition-all duration-300 group ${
+                    isScrolled
+                      ? "text-gray-700 hover:text-[#006BD6]"
+                      : "text-white/90 hover:text-white"
+                  }`}
+                >
+                  {item.label}
+                  <span
+                    className={`absolute bottom-0 left-1/2 -translate-x-1/2 h-0.5 w-0 group-hover:w-full transition-all duration-300 ${
+                      isScrolled ? "bg-[#006BD6]" : "bg-white"
+                    }`}
+                  />
+                </Link>
+              ))}
+              <a
+                href="https://smartstore.naver.com/divershop"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ml-6 px-6 py-2.5 bg-[#006BD6] hover:bg-[#004fa3] text-white text-[12px] font-bold tracking-widest uppercase rounded-none transition-all duration-300 shadow-lg shadow-blue-600/20"
+                style={{ fontFamily: "'Montserrat', sans-serif" }}
+              >
+                BOOK NOW
+              </a>
+            </nav>
+
+            {/* Hamburger */}
+            <button
+              className={`lg:hidden transition-colors duration-300 ${
+                isScrolled ? "text-gray-900" : "text-white"
+              }`}
+              onClick={() => setIsOpen(!isOpen)}
+              aria-label="메뉴 열기"
+            >
+              <div className="w-7 flex flex-col gap-1.5">
+                <span
+                  className={`block h-0.5 bg-current transition-all duration-300 ${
+                    isOpen ? "rotate-45 translate-y-2" : ""
+                  }`}
+                />
+                <span
+                  className={`block h-0.5 bg-current transition-all duration-300 ${
+                    isOpen ? "opacity-0" : ""
+                  }`}
+                />
+                <span
+                  className={`block h-0.5 bg-current transition-all duration-300 ${
+                    isOpen ? "-rotate-45 -translate-y-2" : ""
+                  }`}
+                />
+              </div>
+            </button>
+          </div>
+        </div>
+
+        {/* Mobile Menu */}
+        <div
+          className={`lg:hidden overflow-hidden transition-all duration-500 bg-white ${
+            isOpen ? "max-h-screen shadow-xl" : "max-h-0"
+          }`}
         >
-          <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            {isOpen ? (
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            ) : (
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-            )}
+          <nav className="flex flex-col py-4 border-t border-gray-100">
+            {navItems.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setIsOpen(false)}
+                className="px-6 py-3.5 text-gray-800 font-bold text-sm hover:text-[#006BD6] hover:bg-blue-50 transition-all border-b border-gray-50"
+              >
+                {item.label}
+              </Link>
+            ))}
+            {/* 모바일 메뉴 하단 - SNS 링크 + 예약 버튼 */}
+            <div className="px-6 pt-4 pb-3 flex gap-3 text-[11px] font-bold text-gray-400 border-b border-gray-50">
+              <a href="https://www.instagram.com/ecodivers_jeju" target="_blank" rel="noopener noreferrer" className="hover:text-[#006BD6]">INSTAGRAM</a>
+              <span className="opacity-30">|</span>
+              <a href="http://pf.kakao.com/_xgpxexnxj" target="_blank" rel="noopener noreferrer" className="hover:text-[#006BD6]">KAKAOTALK</a>
+            </div>
+            <div className="px-6 pt-4 pb-3 flex gap-3">
+              <a
+                href="https://smartstore.naver.com/divershop"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 py-3 bg-[#006BD6] text-white text-center text-sm font-bold tracking-wider"
+              >
+                BOOK NOW
+              </a>
+              <Link
+                href="/login"
+                onClick={() => setIsOpen(false)}
+                className="flex-1 py-3 border-2 border-[#006BD6] text-[#006BD6] text-center text-sm font-bold tracking-wider"
+              >
+                LOGIN
+              </Link>
+            </div>
+          </nav>
+        </div>
+      </header>
+
+      {/* Floating Action Buttons */}
+      <div className="fixed right-4 bottom-6 z-40 flex flex-col gap-3">
+        <a
+          href="http://pf.kakao.com/_xgpxexnxj"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="w-11 h-11 md:w-12 md:h-12 bg-[#FEE500] rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-transform"
+          title="카카오톡 문의"
+        >
+          <svg className="w-5 h-5 md:w-6 md:h-6" viewBox="0 0 24 24" fill="#000">
+            <path d="M12 3C6.48 3 2 6.55 2 10.92c0 2.73 1.74 5.15 4.37 6.61L5.3 21l4.57-2.25c.7.1 1.42.15 2.13.15 5.52 0 10-3.55 10-7.92C22 6.55 17.52 3 12 3z"/>
+          </svg>
+        </a>
+        <a
+          href="tel:01074143373"
+          className="w-11 h-11 md:w-12 md:h-12 bg-[#006BD6] rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-transform"
+          title="전화 문의"
+        >
+          <svg className="w-4 h-4 md:w-5 md:h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/>
+          </svg>
+        </a>
+        <button
+          onClick={() => {
+            const el = document.querySelector(".scroll-snap-container");
+            if (el) el.scrollTo({ top: 0, behavior: "smooth" });
+            else window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+          className="w-11 h-11 md:w-12 md:h-12 bg-gray-800 rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-transform"
+          title="맨 위로"
+        >
+          <svg className="w-4 h-4 md:w-5 md:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 10l7-7m0 0l7 7m-7-7v18" />
           </svg>
         </button>
       </div>
-
-      {/* Mobile Menu */}
-      {isOpen && (
-        <nav className="lg:hidden bg-white absolute top-full left-0 w-full flex flex-col items-center py-10 gap-6 text-gray-900 font-bold text-lg shadow-2xl border-t border-gray-100">
-          <Link href="#products" onClick={() => setIsOpen(false)}>상품안내</Link>
-          <Link href="#booking" onClick={() => setIsOpen(false)}>예약</Link>
-          <Link href="#community" onClick={() => setIsOpen(false)}>커뮤니티</Link>
-          <Link href="#about" onClick={() => setIsOpen(false)}>소개</Link>
-          <div className="flex gap-4 mt-4 py-4 border-t w-full justify-center">
-            <button className="text-sm text-gray-500">KOR</button>
-            <button className="text-sm text-gray-500">ENG</button>
-            <Link href="/admin/login" className="text-sm text-blue-600 font-bold ml-4">로그인</Link>
-          </div>
-        </nav>
-      )}
-    </header>
+    </>
   );
 }

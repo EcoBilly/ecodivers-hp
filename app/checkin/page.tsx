@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Check, ClipboardList, ShieldCheck, User, Info, Smartphone } from "lucide-react";
+import { Check, ClipboardList, ShieldCheck, User, Info, Smartphone, Activity } from "lucide-react";
 
 function CheckinForm() {
   const searchParams = useSearchParams();
@@ -20,6 +20,8 @@ function CheckinForm() {
   const [finSize, setFinSize] = useState("");
   const [agreed, setAgreed] = useState(false);
   const [isClient, setIsClient] = useState(false);
+  const [settings, setSettings] = useState<any>(null);
+  const [healthAnswers, setHealthAnswers] = useState<Record<string, boolean>>({});
 
   // Signature Canvas
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -33,24 +35,59 @@ function CheckinForm() {
       return;
     }
 
-    const fetchBooking = async () => {
+    const fetchData = async () => {
       try {
-        const docRef = doc(db, "bookings", id);
-        const docSnap = await getDoc(docRef);
+        const [docSnap, settingsSnap] = await Promise.all([
+          getDoc(doc(db, "bookings", id)),
+          getDoc(doc(db, "settings", "checkin"))
+        ]);
+
         if (docSnap.exists()) {
-          setBooking({ id: docSnap.id, ...docSnap.data() });
+          const data = docSnap.data();
+          setBooking({ id: docSnap.id, ...data });
+
+          let sData: any = {};
+          if (settingsSnap.exists()) {
+            sData = settingsSnap.data();
+            setSettings(sData);
+            if (sData.healthQuestions) {
+              const answers: Record<string, boolean> = {};
+              sData.healthQuestions.forEach((q: any) => {
+                if (q.active) answers[q.id] = false;
+              });
+              setHealthAnswers(answers);
+            }
+          } else {
+            sData = {
+              liabilityWaiver: `본인은 에코다이버스에서 진행하는 프로그램에 참여함에 있어 다음의 사항을 충분히 이해하고 동의합니다.\n\n1. 본인은 현재 건강 상태가 양호하며, 프로그램 참여에 방해가 될 만한 기저질환(심장병, 폐질환, 고혈압 등)이 없음을 확인합니다.\n2. 진행 요원의 안전 수칙 및 지시 사항을 철저히 준수할 것을 약속합니다.\n3. 안전 수칙을 미준수하거나 본인의 부주의로 발생하는 사고에 대해서는 본인에게 책임이 있음을 인지합니다.\n4. 활동 중 발생할 수 있는 경미한 찰과상 등에 대해 안전 요원의 응급 처치에 동의합니다.`
+            };
+            setSettings(sData);
+          }
+
+          // Check time limit — allow checkin up to N minutes AFTER booking time
+          if (sData.timeLimitMinutes !== undefined && sData.timeLimitMinutes > 0 && data.date && data.time) {
+            const timeString = data.time.length === 5 ? `${data.time}:00` : data.time;
+            const bookingDateTime = new Date(`${data.date}T${timeString}`);
+            const deadlineTime = new Date(bookingDateTime.getTime() + sData.timeLimitMinutes * 60000);
+
+            if (new Date() > deadlineTime) {
+               setError(`온라인 체크인이 마감되었습니다. (예약 시간 후 ${sData.timeLimitMinutes}분 초과)\n현장 데스크에 문의해 주세요.`);
+               setLoading(false);
+               return;
+            }
+          }
         } else {
           setError("예약 정보를 찾을 수 없습니다.");
         }
       } catch (err: any) {
-        console.error("Error fetching booking:", err);
+        console.error("Error fetching data:", err);
         setError("데이터를 불러오는 중 오류가 발생했습니다.");
       } finally {
         setLoading(false);
       }
     };
 
-    fetchBooking();
+    fetchData();
   }, [id]);
 
   // Canvas Logic
@@ -121,6 +158,7 @@ function CheckinForm() {
           suit: suitSize,
           fin: finSize,
         },
+        healthAnswers: healthAnswers,
         checkInDate: new Date().toISOString()
       });
       setSubmitted(true);
@@ -259,6 +297,39 @@ function CheckinForm() {
           </div>
         </div>
 
+        {/* Health Questionnaire */}
+        {settings?.healthQuestions && settings.healthQuestions.filter((q: any) => q.active).length > 0 && (
+          <div className="bg-white rounded-2xl shadow-xl p-6 mb-6">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-2.5 bg-blue-50 rounded-lg">
+                <Activity className="w-6 h-6 text-blue-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-black text-gray-900">건강 문진표</h2>
+                <p className="text-xs text-gray-500 mt-1">해당되는 항목이 있다면 체크해 주세요.</p>
+              </div>
+            </div>
+            <div className="space-y-4">
+              {settings.healthQuestions.filter((q: any) => q.active).map((q: any) => (
+                <label key={q.id} className="flex items-start gap-3 cursor-pointer p-3 border border-gray-100 rounded-xl hover:bg-gray-50 transition">
+                  <div className="pt-0.5">
+                    <input 
+                      type="checkbox" 
+                      checked={!!healthAnswers[q.id]}
+                      onChange={e => setHealthAnswers({ ...healthAnswers, [q.id]: e.target.checked })}
+                      className="w-5 h-5 rounded text-blue-600 border-gray-300 focus:ring-blue-500 cursor-pointer"
+                    />
+                  </div>
+                  <span className="text-sm font-bold text-gray-700 leading-snug">{q.text}</span>
+                </label>
+              ))}
+            </div>
+            <div className="mt-4 p-3 bg-red-50 rounded-lg">
+              <p className="text-xs font-bold text-red-600">※ 질환이 있을 경우, 사전 고지 의무가 있으며 다이빙이 제한될 수 있습니다.</p>
+            </div>
+          </div>
+        )}
+
         {/* Liability Waiver */}
         <div className="bg-white rounded-2xl shadow-xl p-6 mb-6">
           <div className="flex items-center gap-3 mb-4">
@@ -268,12 +339,7 @@ function CheckinForm() {
             <h2 className="text-lg font-black text-gray-900">안전 면책 동의서</h2>
           </div>
           <div className="bg-gray-50 rounded-xl p-4 text-xs text-gray-600 leading-relaxed max-h-40 overflow-y-auto mb-4 border border-gray-100 font-medium whitespace-pre-wrap">
-{`본인은 에코다이버스에서 진행하는 프로그램에 참여함에 있어 다음의 사항을 충분히 이해하고 동의합니다.
-
-1. 본인은 현재 건강 상태가 양호하며, 프로그램 참여에 방해가 될 만한 기저질환(심장병, 폐질환, 고혈압 등)이 없음을 확인합니다.
-2. 진행 요원의 안전 수칙 및 지시 사항을 철저히 준수할 것을 약속합니다.
-3. 안전 수칙을 미준수하거나 본인의 부주의로 발생하는 사고에 대해서는 본인에게 책임이 있음을 인지합니다.
-4. 활동 중 발생할 수 있는 경미한 찰과상 등에 대해 안전 요원의 응급 처치에 동의합니다.`}
+            {settings?.liabilityWaiver || "면책 동의서 내용을 불러오는 중입니다..."}
           </div>
           <label className="flex items-center gap-3 cursor-pointer select-none group">
             <input 
