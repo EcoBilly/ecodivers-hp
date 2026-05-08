@@ -160,42 +160,53 @@ export default function AdminSchedulePage() {
 
   // chat_id 수동 저장
   const saveTelegramChatId = async () => {
-    const id = telegramInput.trim();
-    if (!id) return;
-    localStorage.setItem('ecodivers_telegram_chat_id', id);
-    setTelegramChatId(id);
-    telegramChatIdRef.current = id;
+    const rawId = telegramInput.trim();
+    if (!rawId) return;
+    localStorage.setItem('ecodivers_telegram_chat_id', rawId);
+    setTelegramChatId(rawId);
+    telegramChatIdRef.current = rawId;
     setBotStatus('connected');
 
     // 연결 테스트 메시지 발송
     const token = process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN;
     if (token) {
-      try {
-        const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chat_id: id,
-            text: '✅ <b>에코다이버스 봇 연결 완료!</b>\n이제부터 예약 알림과 일정 변경 소식을 받을 수 있습니다.\n하단 [📅 내일 일정] 버튼을 눌러보세요.',
-            parse_mode: 'HTML',
-            reply_markup: {
-              keyboard: [[{ text: '📅 내일 일정' }]],
-              resize_keyboard: true,
-              persistent: true
-            }
-          })
-        });
-        const data = await res.json();
-        if (!data.ok) {
-          alert('전송 실패: Chat ID를 확인해주세요.\n' + (data.description || ''));
-          setBotStatus('error');
-        } else {
-          setShowBotSetup(false);
-          alert('텔레그램 연결 완료! 메시지를 확인하세요.');
+      const chatIds = rawId.split(',').map(id => id.trim()).filter(Boolean);
+      let successCount = 0;
+      const errorMsgs: string[] = [];
+      
+      for (const id of chatIds) {
+        try {
+          const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: id,
+              text: '✅ <b>에코다이버스 봇 연결 완료!</b>\n이제부터 예약 알림과 일정 변경 소식을 받을 수 있습니다.\n하단 [📅 내일 일정] 버튼을 눌러보세요.',
+              parse_mode: 'HTML',
+              reply_markup: {
+                keyboard: [[{ text: '📅 내일 일정' }]],
+                resize_keyboard: true,
+                persistent: true
+              }
+            })
+          });
+          const data = await res.json();
+          if (data.ok) {
+            successCount++;
+          } else {
+            errorMsgs.push(`${id}: ${data.description || 'Unknown error'}`);
+          }
+        } catch {
+          errorMsgs.push(`${id}: 네트워크 오류`);
         }
-      } catch {
-        alert('네트워크 오류가 발생했습니다.');
-        setBotStatus('error');
+      }
+      
+      if (successCount === chatIds.length && successCount > 0) {
+        setShowBotSetup(false);
+        alert(`텔레그램 연결 완료! (${successCount}개 방에 메시지 전송됨)`);
+      } else {
+        alert(`일부 전송 실패:\n${errorMsgs.join('\\n')}`);
+        if (successCount === 0) setBotStatus('error');
       }
     }
   };
@@ -203,7 +214,7 @@ export default function AdminSchedulePage() {
   useEffect(() => {
     let updateOffset = 0;
     
-    const sendTomorrowSchedule = async (chatId: string) => {
+    const sendTomorrowSchedule = async (chatIdStr: string) => {
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
       const tomorrowStr = format(tomorrow, "yyyy-MM-dd");
@@ -225,40 +236,46 @@ export default function AdminSchedulePage() {
       const token = process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN;
       if (!token) return;
 
-      await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: chatId,
-          text: msg,
-          parse_mode: 'HTML',
-          reply_markup: {
-            keyboard: [[{ text: '📅 내일 일정' }]],
-            resize_keyboard: true,
-            persistent: true
-          }
-        })
-      });
+      const chatIds = chatIdStr.split(',').map(id => id.trim()).filter(Boolean);
+      for (const id of chatIds) {
+        await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: id,
+            text: msg,
+            parse_mode: 'HTML',
+            reply_markup: {
+              keyboard: [[{ text: '📅 내일 일정' }]],
+              resize_keyboard: true,
+              persistent: true
+            }
+          })
+        });
+      }
     };
 
-    const sendTelegramMessage = async (chatId: string, msg: string, useKeyboard = false) => {
+    const sendTelegramMessage = async (chatIdStr: string, msg: string, useKeyboard = false) => {
       const token = process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN;
       if (!token) return;
 
-      const payload: any = { chat_id: chatId, text: msg, parse_mode: 'HTML' };
-      if (useKeyboard) {
-        payload.reply_markup = {
-          keyboard: [[{ text: '📅 내일 일정' }]],
-          resize_keyboard: true,
-          persistent: true
-        };
-      }
+      const chatIds = chatIdStr.split(',').map(id => id.trim()).filter(Boolean);
+      for (const id of chatIds) {
+        const payload: any = { chat_id: id, text: msg, parse_mode: 'HTML' };
+        if (useKeyboard) {
+          payload.reply_markup = {
+            keyboard: [[{ text: '📅 내일 일정' }]],
+            resize_keyboard: true,
+            persistent: true
+          };
+        }
 
-      await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+        await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+      }
     };
 
     const pollTelegram = async () => {
@@ -278,10 +295,18 @@ export default function AdminSchedulePage() {
               const chatId = message.chat.id.toString();
               
               console.log('[TelegramBot] Received:', text, 'from chatId:', chatId);
-              localStorage.setItem('ecodivers_telegram_chat_id', chatId);
-              setTelegramChatId(chatId);
-              telegramChatIdRef.current = chatId;
-              setBotStatus('connected');
+              
+              let currentList = localStorage.getItem('ecodivers_telegram_chat_id') || '';
+              const idList = currentList.split(',').map(id => id.trim()).filter(Boolean);
+              if (!idList.includes(chatId)) {
+                idList.push(chatId);
+                const newList = idList.join(', ');
+                localStorage.setItem('ecodivers_telegram_chat_id', newList);
+                setTelegramChatId(newList);
+                setTelegramInput(newList);
+                telegramChatIdRef.current = newList;
+                setBotStatus('connected');
+              }
 
               if (text === '/start') {
                 await sendTelegramMessage(chatId, '안녕하세요! 에코다이버스 알림 봇입니다.\n하단 메뉴의 <b>[📅 내일 일정]</b> 버튼을 누르시면 내일 예약 현황을 알려드립니다.', true);
@@ -445,19 +470,23 @@ export default function AdminSchedulePage() {
         window.alert("저장되었습니다.");
         
         // 텔레그램 알림 발송
-        const chatId = telegramChatIdRef.current || localStorage.getItem('ecodivers_telegram_chat_id');
+        const chatIdStr = telegramChatIdRef.current || localStorage.getItem('ecodivers_telegram_chat_id');
         const token = process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN;
-        if (chatId && token) {
+        if (chatIdStr && token) {
+          const chatIds = chatIdStr.split(',').map(id => id.trim()).filter(Boolean);
           let dateText = editingBooking.date;
           if (editingBooking.id === 'new' && formEndDate && formEndDate > editingBooking.date) {
             dateText = `${editingBooking.date} ~ ${formEndDate}`;
           }
           const msg = `🔔 <b>일정 추가/변경</b>\n${dateText} ${editingBooking.time}\n${editingBooking.name}님 (${editingBooking.pax}명) - ${editingBooking.category}`;
-          fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chat_id: chatId, text: msg, parse_mode: 'HTML' })
-          }).catch(() => {});
+          
+          chatIds.forEach(id => {
+            fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chat_id: id, text: msg, parse_mode: 'HTML' })
+            }).catch(() => {});
+          });
         }
       }
       setIsModalOpen(false);
@@ -512,15 +541,18 @@ export default function AdminSchedulePage() {
       console.log("Firestore: Booking deleted successfully");
       await saveBackup({ ...editingBooking, action: "delete" });
       
-      const chatId = telegramChatIdRef.current || localStorage.getItem('ecodivers_telegram_chat_id');
+      const chatIdStr = telegramChatIdRef.current || localStorage.getItem('ecodivers_telegram_chat_id');
       const token = process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN;
-      if (chatId && token) {
+      if (chatIdStr && token) {
+        const chatIds = chatIdStr.split(',').map(id => id.trim()).filter(Boolean);
         const msg = `🗑 <b>일정 삭제됨</b>\n${editingBooking.date} ${editingBooking.time}\n${editingBooking.name}님 (${editingBooking.pax}명) - ${editingBooking.category}`;
-        fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chat_id: chatId, text: msg, parse_mode: 'HTML' })
-        }).catch(() => {});
+        chatIds.forEach(id => {
+          fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: id, text: msg, parse_mode: 'HTML' })
+          }).catch(() => {});
+        });
       }
       
       setIsModalOpen(false);
@@ -559,17 +591,20 @@ export default function AdminSchedulePage() {
       setIsModalOpen(false);
       alert(rescheduleMode ? '일정이 변경되었습니다.' : '일정이 취소되었습니다.');
       
-      const chatId = telegramChatIdRef.current || localStorage.getItem('ecodivers_telegram_chat_id');
+      const chatIdStr = telegramChatIdRef.current || localStorage.getItem('ecodivers_telegram_chat_id');
       const token = process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN;
-      if (chatId && token) {
+      if (chatIdStr && token) {
+        const chatIds = chatIdStr.split(',').map(id => id.trim()).filter(Boolean);
         const msg = rescheduleMode 
           ? `🔄 <b>일정 변경됨</b>\n[기존] ${bk.date} ${bk.time}\n[변경] ${rescheduleData.date} ${rescheduleData.time}\n${bk.name}님 (${bk.pax}명) - ${rescheduleData.category}`
           : `❌ <b>일정 취소됨</b>\n${bk.date} ${bk.time}\n${bk.name}님 (${bk.pax}명) - ${bk.category}\n사유: ${cancelReason}`;
-        fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chat_id: chatId, text: msg, parse_mode: 'HTML' })
-        }).catch(() => {});
+        chatIds.forEach(id => {
+          fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: id, text: msg, parse_mode: 'HTML' })
+          }).catch(() => {});
+        });
       }
       
     } catch { alert('처리 중 오류가 발생했습니다.'); }
@@ -627,7 +662,7 @@ export default function AdminSchedulePage() {
                     type="text"
                     value={telegramInput}
                     onChange={e => setTelegramInput(e.target.value)}
-                    placeholder="Chat ID 입력 (예: 123456789)"
+                    placeholder="Chat ID 입력 (예: 12345, -67890)"
                     className="flex-1 px-3 py-1.5 border border-blue-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-400"
                   />
                   <button
