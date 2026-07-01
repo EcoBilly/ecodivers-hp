@@ -2,6 +2,7 @@ import * as admin from 'firebase-admin';
 
 export function getDbAdmin() {
       if (!admin.apps.length) {
+            
               try {
                         const privateKey = process.env.FIREBASE_PRIVATE_KEY;
                         const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
