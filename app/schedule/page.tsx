@@ -1,11 +1,13 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import {
   format, addMonths, subMonths, startOfMonth, endOfMonth,
   startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay
 } from "date-fns";
 import { ko } from "date-fns/locale";
+import { collection, onSnapshot } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 // Booking Interface
 interface Booking {
@@ -46,28 +48,23 @@ export default function PublicSchedulePage() {
   const nextMonth = () => setCurrentDate(addMonths(currentDate, 1));
   const goToday = () => setCurrentDate(new Date());
 
-  // API로 데이터 가져오기
-  const fetchBookings = useCallback(async () => {
-    try {
-      const res = await fetch('/api/schedule/bookings', { cache: 'no-store' });
-      if (!res.ok) throw new Error('Failed to fetch');
-      const data = await res.json();
-      setBookings(data.bookings || []);
-      setLastUpdated(new Date());
-    } catch (error) {
-      console.error('Fetch bookings error:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
+  // Firebase 실시간 구독 (읽기 전용)
   useEffect(() => {
     setIsClient(true);
-    fetchBookings();
-    // 30초마다 자동 갱신
-    const interval = setInterval(fetchBookings, 30000);
-    return () => clearInterval(interval);
-  }, [fetchBookings]);
+    const q = collection(db, "bookings");
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const all = snapshot.docs
+        .map(d => ({ id: d.id, ...d.data() } as Booking))
+        .filter((b: Booking & { deleted?: boolean }) => !b.deleted && !b.cancelled);
+      setBookings(all);
+      setLastUpdated(new Date());
+      setLoading(false);
+    }, (error: unknown) => {
+      console.error("Firestore Error:", error);
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
 
   // 모달 열릴 때 배경 스크롤 방지
   useEffect(() => {
@@ -113,41 +110,30 @@ export default function PublicSchedulePage() {
             <div className="inline-flex items-center gap-2 bg-blue-100 text-blue-700 text-xs font-bold px-3 py-1.5 rounded-full mb-3">
               <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
               {lastUpdated
-                ? `${format(lastUpdated, 'HH:mm:ss')} 기준 • 30초마다 갱신`
+                ? `${format(lastUpdated, 'HH:mm:ss')} 기준 • 실시간`
                 : '데이터 로딩 중...'}
             </div>
             <h1 className="text-3xl font-extrabold text-blue-900 drop-shadow-sm">에코다이버스 일정표</h1>
             <p className="text-sm text-gray-500 mt-2 font-medium">📅 직원 공유용 — 조회 전용</p>
           </div>
 
-          <div className="flex flex-col items-end gap-3">
-            {/* 새로고침 버튼 */}
-            <button
-              onClick={fetchBookings}
-              className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-600 text-sm font-bold rounded-xl hover:bg-gray-50 shadow-sm transition"
-            >
-              <span className={loading ? 'animate-spin inline-block' : ''}>↻</span>
-              새로고침
-            </button>
-
-            {/* 범례 */}
-            <div className="flex flex-wrap gap-2 bg-white p-3 rounded-2xl border border-gray-100 shadow-sm">
-              <div className="flex items-center gap-1.5 text-xs text-gray-600 font-medium">
-                <span className="w-3 h-3 rounded-sm bg-gray-200 border border-gray-300 inline-block" />
-                일반
-              </div>
-              <div className="flex items-center gap-1.5 text-xs text-gray-600 font-medium">
-                <span className="w-3 h-3 rounded-sm bg-blue-600 inline-block" />
-                체크인 완료
-              </div>
-              <div className="flex items-center gap-1.5 text-xs text-gray-600 font-medium">
-                <span className="w-3 h-3 rounded-sm bg-red-500 inline-block" />
-                만석 (10명+)
-              </div>
-              <div className="flex items-center gap-1.5 text-xs text-gray-600 font-medium">
-                <span className="w-3 h-3 rounded-sm bg-yellow-400 inline-block" />
-                만석+체크인
-              </div>
+          {/* 범례 */}
+          <div className="flex flex-wrap gap-2 bg-white p-3 rounded-2xl border border-gray-100 shadow-sm">
+            <div className="flex items-center gap-1.5 text-xs text-gray-600 font-medium">
+              <span className="w-3 h-3 rounded-sm bg-gray-200 border border-gray-300 inline-block" />
+              일반
+            </div>
+            <div className="flex items-center gap-1.5 text-xs text-gray-600 font-medium">
+              <span className="w-3 h-3 rounded-sm bg-blue-600 inline-block" />
+              체크인 완료
+            </div>
+            <div className="flex items-center gap-1.5 text-xs text-gray-600 font-medium">
+              <span className="w-3 h-3 rounded-sm bg-red-500 inline-block" />
+              만석 (10명+)
+            </div>
+            <div className="flex items-center gap-1.5 text-xs text-gray-600 font-medium">
+              <span className="w-3 h-3 rounded-sm bg-yellow-400 inline-block" />
+              만석+체크인
             </div>
           </div>
         </div>
@@ -202,7 +188,6 @@ export default function PublicSchedulePage() {
               </div>
             </div>
           ) : (
-            /* 날짜 셀 */
             <div className="grid grid-cols-7 bg-white">
               {calendarDays.map((day) => {
                 const dayBookings = getBookingsForDate(day);
@@ -222,11 +207,7 @@ export default function PublicSchedulePage() {
                     `}
                   >
                     <div className="flex justify-between items-start mb-2">
-                      <span
-                        className={`text-sm font-bold w-7 h-7 flex items-center justify-center rounded-full
-                          ${isSameDay(day, new Date()) ? 'bg-blue-600 text-white' : 'text-gray-700'}
-                        `}
-                      >
+                      <span className={`text-sm font-bold w-7 h-7 flex items-center justify-center rounded-full ${isSameDay(day, new Date()) ? 'bg-blue-600 text-white' : 'text-gray-700'}`}>
                         {format(day, 'd')}
                       </span>
                       {dayBookings.length > 0 && (
@@ -236,7 +217,6 @@ export default function PublicSchedulePage() {
                       )}
                     </div>
 
-                    {/* 예약 블록 */}
                     <div className="space-y-1.5 overflow-y-auto max-h-[100px]">
                       {dayBookings.sort((a, b) => a.time.localeCompare(b.time)).map(booking => {
                         const isSlotOverloaded = (timeSlotPax[booking.time] || 0) >= 10;
@@ -295,7 +275,6 @@ export default function PublicSchedulePage() {
               const today = format(new Date(), 'yyyy-MM-dd');
               const todayBookings = bookings.filter(b => b.date === today);
               const todayPax = todayBookings.reduce((s, b) => s + b.pax, 0);
-
               return (
                 <>
                   <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
@@ -331,7 +310,6 @@ export default function PublicSchedulePage() {
             className="bg-white w-full max-w-sm sm:rounded-2xl rounded-t-2xl shadow-2xl overflow-hidden"
             onClick={e => e.stopPropagation()}
           >
-            {/* 헤더 */}
             <div className="bg-gradient-to-r from-blue-600 to-cyan-600 text-white px-5 py-4 flex items-center justify-between">
               <div>
                 <p className="text-xs text-blue-200 font-medium">{summaryModal.date}</p>
@@ -350,7 +328,6 @@ export default function PublicSchedulePage() {
               </button>
             </div>
 
-            {/* 예약 목록 */}
             <div className="p-5 overflow-y-auto max-h-[60vh]">
               {summaryModal.dayBookings.length === 0 ? (
                 <div className="text-center py-10 text-gray-400">
@@ -371,10 +348,7 @@ export default function PublicSchedulePage() {
                       else shortCat = booking.category;
 
                       return (
-                        <div
-                          key={booking.id}
-                          className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 bg-gray-50/60"
-                        >
+                        <div key={booking.id} className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 bg-gray-50/60">
                           <div className={`w-1.5 self-stretch rounded-full flex-shrink-0 ${booking.checkedIn ? 'bg-blue-500' : 'bg-gray-200'}`} />
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-0.5 flex-wrap">
@@ -404,7 +378,6 @@ export default function PublicSchedulePage() {
                 </div>
               )}
 
-              {/* 시간대별 요약 */}
               {summaryModal.dayBookings.length > 0 && (
                 <div className="mt-4 pt-4 border-t border-gray-100">
                   <p className="text-xs font-bold text-gray-400 mb-3">시간대별 요약</p>
@@ -424,7 +397,6 @@ export default function PublicSchedulePage() {
                         else if (cat.includes('스노클링')) displayName = '스노클링';
                         else if (cat.includes('체험')) displayName = '체험다이빙';
                         else if (cat.includes('교육') || cat.includes('자격')) displayName = '자격증 교육';
-
                         const sortedTimes = Object.keys(times).sort();
                         return (
                           <React.Fragment key={cat}>
@@ -446,7 +418,6 @@ export default function PublicSchedulePage() {
               )}
             </div>
 
-            {/* 하단 닫기 버튼 */}
             <div className="px-5 pb-5 pt-2">
               <button
                 onClick={() => setSummaryModal(null)}
