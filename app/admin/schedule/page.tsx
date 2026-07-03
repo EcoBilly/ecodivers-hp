@@ -6,7 +6,7 @@ import {
   startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay
 } from "date-fns";
 import { ko } from "date-fns/locale";
-import { collection, onSnapshot, doc, updateDoc, addDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
+import { collection, onSnapshot, doc, updateDoc, addDoc, deleteDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { saveBackup, exportToJson, exportToCsv, restoreFromJson } from "@/lib/backupService";
 import { auth, getUserRole, type UserRole } from "@/lib/authService";
@@ -33,6 +33,21 @@ interface Booking {
   cameraRental?: boolean;
 }
 
+// 직원 인터페이스
+interface StaffMember {
+  slot: number; // 1~10
+  name: string;
+}
+
+// 직원 휴무 인터페이스
+interface StaffDayOff {
+  id: string;
+  staffId: string; // slot 번호 (문자열)
+  staffName: string;
+  date: string; // yyyy-MM-dd
+  createdAt?: unknown;
+}
+
 export default function AdminSchedulePage() {
   const [isClient, setIsClient] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -54,6 +69,21 @@ export default function AdminSchedulePage() {
   const router = useRouter();
   const [pageTab, setPageTab] = useState<'calendar' | 'settlement'>('calendar');
   const [cancelledBookings, setCancelledBookings] = useState<Booking[]>([]);
+
+  // 직원 휴무 관련 State
+  const [staffMembers, setStaffMembers] = useState<StaffMember[]>(
+    Array.from({ length: 10 }, (_, i) => ({ slot: i + 1, name: '' }))
+  );
+  const [staffDaysOff, setStaffDaysOff] = useState<StaffDayOff[]>([]);
+  const [showStaffSettings, setShowStaffSettings] = useState(false);
+  const [staffSettingsTab, setStaffSettingsTab] = useState<'names' | 'stats'>('names');
+  const [staffNameInputs, setStaffNameInputs] = useState<string[]>(Array(10).fill(''));
+  const [isSavingStaff, setIsSavingStaff] = useState(false);
+  // 직원 휴무 입력 모달
+  const [dayOffModal, setDayOffModal] = useState(false);
+  const [dayOffStaffSlot, setDayOffStaffSlot] = useState<number>(1);
+  const [dayOffSelectedDates, setDayOffSelectedDates] = useState<Set<string>>(new Set());
+  const [dayOffCalendarDate, setDayOffCalendarDate] = useState(new Date());
   const [programPrices, setProgramPrices] = useState<Record<string, number>>(() => {
     if (typeof window !== 'undefined') {
       try { return JSON.parse(localStorage.getItem('ecodivers_prices') || '{}'); } catch { return {}; }
@@ -100,8 +130,11 @@ export default function AdminSchedulePage() {
       if (currentUser) {
         const role = await getUserRole(currentUser);
         setUserRole(role);
+        // role이 없는 일반 계정은 접근 차단
+        if (role !== 'admin' && role !== 'submanager') {
+          router.push("/login?redirect=/admin/schedule&reason=unauthorized");
+        }
       } else {
-        // 비로그인 시 로그인 페이지로 이동 (이미 로그인된 세션이면 Firebase가 자동으로 currentUser를 반환하므로 정상 통과)
         router.push("/login?redirect=/admin/schedule");
       }
     });
@@ -122,9 +155,29 @@ export default function AdminSchedulePage() {
       ]);
     });
 
+    // 직원 목록 구독 (staffMembers)
+    const unsubscribeStaff = onSnapshot(collection(db, "staffMembers"), (snap) => {
+      const loaded: StaffMember[] = Array.from({ length: 10 }, (_, i) => ({ slot: i + 1, name: '' }));
+      snap.docs.forEach(d => {
+        const data = d.data() as { slot: number; name: string };
+        const idx = data.slot - 1;
+        if (idx >= 0 && idx < 10) loaded[idx] = { slot: data.slot, name: data.name || '' };
+      });
+      setStaffMembers(loaded);
+      setStaffNameInputs(loaded.map(m => m.name));
+    });
+
+    // 직원 휴무 기록 구독 (staffDaysOff)
+    const unsubscribeDaysOff = onSnapshot(collection(db, "staffDaysOff"), (snap) => {
+      const offs = snap.docs.map(d => ({ id: d.id, ...d.data() } as StaffDayOff));
+      setStaffDaysOff(offs);
+    });
+
     return () => {
       unsubscribeAuth();
       unsubscribeSnapshot();
+      unsubscribeStaff();
+      unsubscribeDaysOff();
     };
   }, [router]);
 
@@ -181,10 +234,12 @@ export default function AdminSchedulePage() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               chat_id: id,
-              text: '✅ <b>에코다이버스 봇 연결 완료!</b>\n이제부터 예약 알림과 일정 변경 소식을 받을 수 있습니다.\n하단 [📅 내일 일정] 버튼을 눌러보세요.',
+              text: '✅ [에코다이버스 봇 연결 완료!]\n이제부터 예약 알림과 일정 변경 소식을 받을 수 있습니다.\n하단 [📅 내일 일정] 버튼을 눌러보세요.',
               parse_mode: 'HTML',
               reply_markup: {
-                keyboard: [[{ text: '📅 내일 일정' }]],
+                keyboard: [
+                  [{ text: '📅 내일 일정' }, { text: '🗓️ 일정표 바로가기' }]
+                ],
                 resize_keyboard: true,
                 persistent: true
               }
@@ -203,6 +258,13 @@ export default function AdminSchedulePage() {
       
       if (successCount === chatIds.length && successCount > 0) {
         setShowBotSetup(false);
+        // Save to DB
+        try {
+          const docRef = doc(db, 'settings', 'telegram');
+          await setDoc(docRef, { chatIds }, { merge: true });
+        } catch (e) {
+          console.error("Failed to save Chat IDs to DB", e);
+        }
         alert(`텔레그램 연결 완료! (${successCount}개 방에 메시지 전송됨)`);
       } else {
         alert(`일부 전송 실패:\n${errorMsgs.join('\\n')}`);
@@ -211,141 +273,7 @@ export default function AdminSchedulePage() {
     }
   };
 
-  useEffect(() => {
-    let updateOffset = 0;
-    
-    const sendTomorrowSchedule = async (chatIdStr: string) => {
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      const tomorrowStr = format(tomorrow, "yyyy-MM-dd");
-      
-      const tomorrowBookings = bookingsRef.current.filter(b => b.date === tomorrowStr);
-      tomorrowBookings.sort((a, b) => a.time.localeCompare(b.time));
-      
-      let msg = `📅 <b>[내일 일정] ${tomorrowStr}</b>\n\n`;
-      if (tomorrowBookings.length === 0) {
-        msg += "예정된 일정이 없습니다.";
-      } else {
-        tomorrowBookings.forEach(b => {
-          const checkIcon = b.checkedIn ? '✅' : '⏳';
-          msg += `[${b.time}] ${b.name}님 (${b.pax}명) - ${b.category} ${checkIcon}\n`;
-        });
-        msg += `\n총 ${tomorrowBookings.length}건 예약 대기 중`;
-      }
-
-      const token = process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN;
-      if (!token) return;
-
-      const chatIds = chatIdStr.split(',').map(id => id.trim()).filter(Boolean);
-      for (const id of chatIds) {
-        await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chat_id: id,
-            text: msg,
-            parse_mode: 'HTML',
-            reply_markup: {
-              keyboard: [[{ text: '📅 내일 일정' }]],
-              resize_keyboard: true,
-              persistent: true
-            }
-          })
-        });
-      }
-    };
-
-    const sendTelegramMessage = async (chatIdStr: string, msg: string, useKeyboard = false) => {
-      const token = process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN;
-      if (!token) return;
-
-      const chatIds = chatIdStr.split(',').map(id => id.trim()).filter(Boolean);
-      for (const id of chatIds) {
-        const payload: any = { chat_id: id, text: msg, parse_mode: 'HTML' };
-        if (useKeyboard) {
-          payload.reply_markup = {
-            keyboard: [[{ text: '📅 내일 일정' }]],
-            resize_keyboard: true,
-            persistent: true
-          };
-        }
-
-        await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-      }
-    };
-
-    const pollTelegram = async () => {
-      const token = process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN;
-      if (!token) { console.warn('[TelegramBot] Token not found'); return; }
-
-      try {
-        const res = await fetch(`https://api.telegram.org/bot${token}/getUpdates?offset=${updateOffset}&timeout=5`);
-        const data = await res.json();
-        console.log('[TelegramBot] Poll result:', data.ok, 'updates:', data.result?.length);
-        if (data.ok && data.result.length > 0) {
-          for (const update of data.result) {
-            updateOffset = update.update_id + 1;
-            const message = update.message;
-            if (message && message.text) {
-              const text = message.text.trim();
-              const chatId = message.chat.id.toString();
-              
-              console.log('[TelegramBot] Received:', text, 'from chatId:', chatId);
-              
-              let currentList = localStorage.getItem('ecodivers_telegram_chat_id') || '';
-              const idList = currentList.split(',').map(id => id.trim()).filter(Boolean);
-              if (!idList.includes(chatId)) {
-                idList.push(chatId);
-                const newList = idList.join(', ');
-                localStorage.setItem('ecodivers_telegram_chat_id', newList);
-                setTelegramChatId(newList);
-                setTelegramInput(newList);
-                telegramChatIdRef.current = newList;
-                setBotStatus('connected');
-              }
-
-              if (text === '/start') {
-                await sendTelegramMessage(chatId, '안녕하세요! 에코다이버스 알림 봇입니다.\n하단 메뉴의 <b>[📅 내일 일정]</b> 버튼을 누르시면 내일 예약 현황을 알려드립니다.', true);
-              } else if (text === '📅 내일 일정' || text === '내일 일정') {
-                await sendTomorrowSchedule(chatId);
-              }
-            }
-          }
-        }
-      } catch (e) {
-        console.error('[TelegramBot] Poll error:', e);
-      }
-    };
-
-    // 즉시 한 번 폴링
-    pollTelegram();
-    const interval = setInterval(pollTelegram, 5000);
-    
-    // 7 PM Daily Summary Check
-    const dailyInterval = setInterval(() => {
-      const now = new Date();
-      if (now.getHours() === 19 && now.getMinutes() === 0) {
-        const lastSent = localStorage.getItem('ecodivers_telegram_last_summary');
-        const todayStr = format(now, "yyyy-MM-dd");
-        if (lastSent !== todayStr) {
-          const chatId = telegramChatIdRef.current || localStorage.getItem('ecodivers_telegram_chat_id');
-          if (chatId) {
-            localStorage.setItem('ecodivers_telegram_last_summary', todayStr);
-            sendTomorrowSchedule(chatId);
-          }
-        }
-      }
-    }, 30000);
-
-    return () => {
-      clearInterval(interval);
-      clearInterval(dailyInterval);
-    };
-  }, []);
+  // 텔레그램 연동 로직은 Serverless Function으로 이전되었습니다. (webhook, cron 사용)
 
   // 캘린더 날짜 계산
   const monthStart = startOfMonth(currentDate);
@@ -357,7 +285,11 @@ export default function AdminSchedulePage() {
   // 이전/다음 달 이동
   const prevMonth = () => setCurrentDate(subMonths(currentDate, 1));
   const nextMonth = () => setCurrentDate(addMonths(currentDate, 1));
-  const goToday = () => setCurrentDate(new Date());
+  const goToday = () => {
+    const today = new Date();
+    setCurrentDate(today);
+    openNewModal(today);
+  };
 
   // 2. 예약 데이터 가공 및 지능형 상태별 색상 로직
   const getBookingsForDate = (date: Date) => {
@@ -469,25 +401,20 @@ export default function AdminSchedulePage() {
       if (typeof window !== "undefined") {
         window.alert("저장되었습니다.");
         
-        // 텔레그램 알림 발송
-        const chatIdStr = telegramChatIdRef.current || localStorage.getItem('ecodivers_telegram_chat_id');
-        const token = process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN;
-        if (chatIdStr && token) {
-          const chatIds = chatIdStr.split(',').map(id => id.trim()).filter(Boolean);
-          let dateText = editingBooking.date;
-          if (editingBooking.id === 'new' && formEndDate && formEndDate > editingBooking.date) {
-            dateText = `${editingBooking.date} ~ ${formEndDate}`;
+        // 텔레그램 알림 발송 (Serverless API 호출)
+        let actionStr = 'update';
+        if (editingBooking.id === 'new') {
+          actionStr = 'create';
+          if (formEndDate && formEndDate > editingBooking.date) {
+            editingBooking.date = `${editingBooking.date} ~ ${formEndDate}`;
           }
-          const msg = `🔔 <b>일정 추가/변경</b>\n${dateText} ${editingBooking.time}\n${editingBooking.name}님 (${editingBooking.pax}명) - ${editingBooking.category}`;
-          
-          chatIds.forEach(id => {
-            fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ chat_id: id, text: msg, parse_mode: 'HTML' })
-            }).catch(() => {});
-          });
         }
+        
+        fetch('/api/telegram/notify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: actionStr, booking: editingBooking })
+        }).catch(e => console.error("Telegram Notify API Error:", e));
       }
       setIsModalOpen(false);
     } catch (error: any) {
@@ -541,19 +468,11 @@ export default function AdminSchedulePage() {
       console.log("Firestore: Booking deleted successfully");
       await saveBackup({ ...editingBooking, action: "delete" });
       
-      const chatIdStr = telegramChatIdRef.current || localStorage.getItem('ecodivers_telegram_chat_id');
-      const token = process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN;
-      if (chatIdStr && token) {
-        const chatIds = chatIdStr.split(',').map(id => id.trim()).filter(Boolean);
-        const msg = `🗑 <b>일정 삭제됨</b>\n${editingBooking.date} ${editingBooking.time}\n${editingBooking.name}님 (${editingBooking.pax}명) - ${editingBooking.category}`;
-        chatIds.forEach(id => {
-          fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chat_id: id, text: msg, parse_mode: 'HTML' })
-          }).catch(() => {});
-        });
-      }
+      fetch('/api/telegram/notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete', booking: editingBooking })
+      }).catch(e => console.error("Telegram Notify API Error:", e));
       
       setIsModalOpen(false);
     } catch (error: unknown) {
@@ -591,21 +510,16 @@ export default function AdminSchedulePage() {
       setIsModalOpen(false);
       alert(rescheduleMode ? '일정이 변경되었습니다.' : '일정이 취소되었습니다.');
       
-      const chatIdStr = telegramChatIdRef.current || localStorage.getItem('ecodivers_telegram_chat_id');
-      const token = process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN;
-      if (chatIdStr && token) {
-        const chatIds = chatIdStr.split(',').map(id => id.trim()).filter(Boolean);
-        const msg = rescheduleMode 
-          ? `🔄 <b>일정 변경됨</b>\n[기존] ${bk.date} ${bk.time}\n[변경] ${rescheduleData.date} ${rescheduleData.time}\n${bk.name}님 (${bk.pax}명) - ${rescheduleData.category}`
-          : `❌ <b>일정 취소됨</b>\n${bk.date} ${bk.time}\n${bk.name}님 (${bk.pax}명) - ${bk.category}\n사유: ${cancelReason}`;
-        chatIds.forEach(id => {
-          fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chat_id: id, text: msg, parse_mode: 'HTML' })
-          }).catch(() => {});
-        });
-      }
+      fetch('/api/telegram/notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          action: rescheduleMode ? 'reschedule' : 'cancel', 
+          booking: bk, 
+          rescheduleData, 
+          cancelReason 
+        })
+      }).catch(e => console.error("Telegram Notify API Error:", e));
       
     } catch { alert('처리 중 오류가 발생했습니다.'); }
     finally { setIsSaving(false); }
@@ -616,6 +530,78 @@ export default function AdminSchedulePage() {
     setProgramPrices(next);
     if (typeof window !== 'undefined') localStorage.setItem('ecodivers_prices', JSON.stringify(next));
   };
+
+  // 직원 이름 저장 (staffMembers 컬렉션 upsert)
+  const saveStaffMembers = async () => {
+    setIsSavingStaff(true);
+    try {
+      for (let i = 0; i < 10; i++) {
+        const slot = i + 1;
+        const name = staffNameInputs[i].trim();
+        const docRef = doc(db, 'staffMembers', `slot_${slot}`);
+        await setDoc(docRef, { slot, name }, { merge: true });
+      }
+      alert('직원 명단이 저장되었습니다.');
+    } catch (e) {
+      console.error('직원 명단 저장 오류:', e);
+      alert('저장 중 오류가 발생했습니다.');
+    } finally {
+      setIsSavingStaff(false);
+    }
+  };
+
+  // 휴무 저장 — 선택된 날짜마다 staffDaysOff 컬렉션에 개별 문서 추가
+  const saveDaysOff = async () => {
+    if (dayOffSelectedDates.size === 0) { alert('날짜를 선택해주세요.'); return; }
+    const member = staffMembers[dayOffStaffSlot - 1];
+    if (!member || !member.name) { alert('직원 이름이 등록되지 않은 번호입니다.'); return; }
+    setIsSavingStaff(true);
+    try {
+      for (const date of Array.from(dayOffSelectedDates).sort()) {
+        // 중복 방지: 같은 직원+날짜 이미 있으면 스킵
+        const exists = staffDaysOff.some(d => d.staffId === String(dayOffStaffSlot) && d.date === date);
+        if (!exists) {
+          await addDoc(collection(db, 'staffDaysOff'), {
+            staffId: String(dayOffStaffSlot),
+            staffName: member.name,
+            date,
+            createdAt: serverTimestamp(),
+          });
+        }
+      }
+      setDayOffSelectedDates(new Set());
+      alert(`${member.name} 직원 휴무 ${dayOffSelectedDates.size}일이 등록되었습니다.`);
+    } catch (e) {
+      console.error('휴무 저장 오류:', e);
+      alert('저장 중 오류가 발생했습니다.');
+    } finally {
+      setIsSavingStaff(false);
+    }
+  };
+
+  // 휴무 삭제
+  const deleteDayOff = async (id: string) => {
+    if (!confirm('이 휴무를 삭제하시겠습니까?')) return;
+    try {
+      await deleteDoc(doc(db, 'staffDaysOff', id));
+    } catch (e) {
+      console.error('휴무 삭제 오류:', e);
+    }
+  };
+
+  // 날짜 셀 클릭 (휴무 달력용) — 단순 토글
+  const toggleDayOffDate = (dateStr: string) => {
+    const newDates = new Set(dayOffSelectedDates);
+    if (newDates.has(dateStr)) {
+      newDates.delete(dateStr);
+    } else {
+      newDates.add(dateStr);
+    }
+    setDayOffSelectedDates(newDates);
+  };
+
+  // 날짜별 휴무 직원 목록
+  const getDayOffsForDate = (dateStr: string) => staffDaysOff.filter(d => d.date === dateStr);
 
   if (!isClient) return null;
 
@@ -719,9 +705,149 @@ export default function AdminSchedulePage() {
                 <Link href="/admin/settlement" className="px-4 py-2 bg-purple-50 text-purple-600 rounded-lg text-sm font-bold hover:bg-purple-100 transition">
                   정산/매출
                 </Link>
+                <button
+                  onClick={() => setShowStaffSettings(!showStaffSettings)}
+                  className={`px-4 py-2 rounded-lg text-sm font-bold transition ${
+                    showStaffSettings
+                      ? 'bg-orange-500 text-white'
+                      : 'bg-orange-50 text-orange-600 hover:bg-orange-100'
+                  }`}
+                >
+                  👥 직원휴무
+                </button>
               </>
             )}
           </div>
+
+          {/* 직원휴무 관리 패널 */}
+          {showStaffSettings && userRole === 'admin' && (
+            <div className="mt-4 w-full bg-white border border-orange-200 rounded-2xl shadow-lg overflow-hidden">
+              {/* 패널 헤더 */}
+              <div className="bg-gradient-to-r from-orange-500 to-amber-500 text-white px-5 py-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">👥</span>
+                  <span className="font-extrabold text-sm">직원 휴무 관리</span>
+                </div>
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => setStaffSettingsTab('names')}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
+                      staffSettingsTab === 'names' ? 'bg-white text-orange-600' : 'bg-white/20 text-white hover:bg-white/30'
+                    }`}
+                  >
+                    직원 명단
+                  </button>
+                  <button
+                    onClick={() => setStaffSettingsTab('stats')}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
+                      staffSettingsTab === 'stats' ? 'bg-white text-orange-600' : 'bg-white/20 text-white hover:bg-white/30'
+                    }`}
+                  >
+                    이번달 통계
+                  </button>
+                </div>
+              </div>
+
+              {/* 직원 명단 탭 */}
+              {staffSettingsTab === 'names' && (
+                <div className="p-5">
+                  <p className="text-xs text-gray-500 mb-4">1~10번 슬롯에 직원 이름을 등록하세요. 빈 칸은 미사용으로 처리됩니다.</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-4">
+                    {Array.from({ length: 10 }, (_, i) => i + 1).map(slot => (
+                      <div key={slot} className="flex items-center gap-2 p-2 bg-gray-50 rounded-xl border border-gray-100">
+                        <span className="w-6 h-6 flex items-center justify-center bg-orange-100 text-orange-700 rounded-full text-xs font-extrabold flex-shrink-0">
+                          {slot}
+                        </span>
+                        <input
+                          type="text"
+                          value={staffNameInputs[slot - 1]}
+                          onChange={e => {
+                            const next = [...staffNameInputs];
+                            next[slot - 1] = e.target.value;
+                            setStaffNameInputs(next);
+                          }}
+                          placeholder="이름"
+                          className="flex-1 min-w-0 border-0 bg-transparent text-sm font-bold text-gray-700 outline-none placeholder:text-gray-300"
+                          maxLength={8}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={saveStaffMembers}
+                      disabled={isSavingStaff}
+                      className="px-5 py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl transition text-sm disabled:opacity-50"
+                    >
+                      {isSavingStaff ? '저장 중...' : '💾 저장'}
+                    </button>
+                    <button
+                      onClick={() => { setDayOffModal(true); setDayOffCalendarDate(new Date()); setDayOffSelectedDates(new Set()); }}
+                      className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition text-sm"
+                    >
+                      📅 휴무 입력
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* 이번달 통계 탭 */}
+              {staffSettingsTab === 'stats' && (
+                <div className="p-5">
+                  <div className="flex items-center justify-between mb-4">
+                    <p className="text-sm font-extrabold text-gray-800">
+                      {format(currentDate, 'yyyy년 MM월', { locale: ko })} 직원 휴무 현황
+                    </p>
+                    <div className="flex gap-1">
+                      <button onClick={prevMonth} className="px-2 py-1 bg-gray-100 rounded-lg text-xs font-bold hover:bg-gray-200">‹</button>
+                      <button onClick={nextMonth} className="px-2 py-1 bg-gray-100 rounded-lg text-xs font-bold hover:bg-gray-200">›</button>
+                    </div>
+                  </div>
+                  {(() => {
+                    const ym = format(currentDate, 'yyyy-MM');
+                    const monthOffs = staffDaysOff.filter(d => d.date.startsWith(ym));
+                    const byStaff: Record<string, { name: string; days: string[] }> = {};
+                    monthOffs.forEach(d => {
+                      if (!byStaff[d.staffId]) byStaff[d.staffId] = { name: d.staffName, days: [] };
+                      byStaff[d.staffId].days.push(d.date);
+                    });
+                    const sorted = Object.entries(byStaff).sort((a, b) => Number(a[0]) - Number(b[0]));
+                    return sorted.length === 0 ? (
+                      <p className="text-center py-8 text-gray-400 text-sm">이번 달 휴무 기록이 없습니다.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {sorted.map(([slotId, info]) => (
+                          <div key={slotId} className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100">
+                            <span className="w-6 h-6 flex items-center justify-center bg-orange-100 text-orange-700 rounded-full text-xs font-extrabold flex-shrink-0 mt-0.5">
+                              {slotId}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="font-bold text-sm text-gray-800">{info.name}</span>
+                                <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-bold">
+                                  {info.days.length}일
+                                </span>
+                              </div>
+                              <div className="flex flex-wrap gap-1">
+                                {info.days.sort().map(d => (
+                                  <span key={d} className="text-xs bg-white border border-gray-200 text-gray-500 px-1.5 py-0.5 rounded font-medium">
+                                    {format(new Date(d + 'T00:00:00'), 'M/d')}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                        <div className="mt-3 p-3 bg-orange-50 rounded-xl border border-orange-100 text-center">
+                          <span className="text-xs text-orange-700 font-bold">총 휴무 {monthOffs.length}일 (연인원)</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Page Tabs */}
@@ -774,6 +900,9 @@ export default function AdminSchedulePage() {
                 categorySummary[b.category][b.time] = (categorySummary[b.category][b.time] || 0) + b.pax;
               });
 
+              const dateStr = format(day, 'yyyy-MM-dd');
+              const dayOffs = getDayOffsForDate(dateStr);
+
               return (
                 <div
                   key={day.toString()}
@@ -805,7 +934,7 @@ export default function AdminSchedulePage() {
                     )}
                   </div>
 
-                  {/* 예약 블랙 렌더링 */}
+                  {/* 예약 블록 렌더링 */}
                   <div className="space-y-1.5 overflow-y-auto max-h-[100px] scrollbar-hide">
                     {dayBookings.sort((a, b) => a.time.localeCompare(b.time)).map(booking => {
 
@@ -850,6 +979,24 @@ export default function AdminSchedulePage() {
                         </div>
                       )
                     })}
+
+                    {/* 직원 휴무 배지 */}
+                    {dayOffs.length > 0 && (
+                      <div
+                        onClick={e => e.stopPropagation()}
+                        className="flex flex-wrap gap-0.5 mt-0.5"
+                      >
+                        {dayOffs.map(off => (
+                          <span
+                            key={off.id}
+                            className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-orange-100 border border-orange-200 text-orange-700 font-bold truncate max-w-full"
+                            title={`${off.staffName} 휴무`}
+                          >
+                            🔴 {off.staffName}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -1358,6 +1505,184 @@ export default function AdminSchedulePage() {
               <button onClick={() => setCancelModal(null)} className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition text-sm">닫기</button>
               <button onClick={handleCancel} disabled={isSaving} className={`flex-1 py-3 font-extrabold rounded-xl transition text-sm text-white disabled:opacity-50 ${rescheduleMode ? 'bg-blue-600 hover:bg-blue-700' : 'bg-red-600 hover:bg-red-700'}`}>
                 {isSaving ? '처리 중...' : (rescheduleMode ? '일정 변경' : '취소 확정')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 직원 휴무 입력 모달 */}
+      {dayOffModal && (
+        <div
+          className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center z-[70] p-4"
+          onClick={() => setDayOffModal(false)}
+        >
+          <div
+            className="bg-white w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl shadow-2xl flex flex-col max-h-[92vh]"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* 헤더 */}
+            <div className="bg-gradient-to-r from-orange-500 to-amber-500 text-white px-5 py-4 flex items-center justify-between flex-shrink-0">
+              <div>
+                <p className="text-xs text-orange-100 font-medium">직원 휴무 등록</p>
+                <h3 className="text-lg font-black">📅 휴무일 선택</h3>
+              </div>
+              <button
+                onClick={() => setDayOffModal(false)}
+                className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 text-white text-xl flex items-center justify-center transition"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="overflow-y-auto flex-1 p-5 space-y-5">
+              {/* 직원 선택 드롭다운 */}
+              <div>
+                <label className="block text-xs font-bold text-gray-600 mb-2">직원 선택</label>
+                <select
+                  value={dayOffStaffSlot}
+                  onChange={e => setDayOffStaffSlot(Number(e.target.value))}
+                  className="w-full border border-gray-200 rounded-xl p-3 text-sm font-bold focus:ring-2 focus:ring-orange-400 outline-none bg-white"
+                >
+                  {staffMembers.map(m => (
+                    <option key={m.slot} value={m.slot} disabled={!m.name}>
+                      {m.slot}번 {m.name ? `— ${m.name}` : '(미등록)'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 휴무 달력 — 날짜 클릭으로 선택/해제, 두 번 클릭 시 범위 선택 */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-bold text-gray-600">날짜 선택</label>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => setDayOffCalendarDate(subMonths(dayOffCalendarDate, 1))}
+                      className="px-2 py-1 bg-gray-100 rounded-lg text-xs font-bold hover:bg-gray-200"
+                    >‹</button>
+                    <span className="px-2 py-1 text-xs font-bold text-gray-700">
+                      {format(dayOffCalendarDate, 'yyyy.MM')}
+                    </span>
+                    <button
+                      onClick={() => setDayOffCalendarDate(addMonths(dayOffCalendarDate, 1))}
+                      className="px-2 py-1 bg-gray-100 rounded-lg text-xs font-bold hover:bg-gray-200"
+                    >›</button>
+                  </div>
+                </div>
+
+                {/* 달력 그리드 */}
+                <div className="border border-gray-200 rounded-xl overflow-hidden">
+                  <div className="grid grid-cols-7 bg-gray-50 border-b border-gray-200">
+                    {['일','월','화','수','목','금','토'].map((d, i) => (
+                      <div key={d} className={`p-2 text-center text-xs font-bold ${
+                        i === 0 ? 'text-red-400' : i === 6 ? 'text-blue-400' : 'text-gray-500'
+                      }`}>{d}</div>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-7">
+                    {(() => {
+                      const mStart = startOfMonth(dayOffCalendarDate);
+                      const mEnd = endOfMonth(dayOffCalendarDate);
+                      const days = eachDayOfInterval({
+                        start: startOfWeek(mStart, { weekStartsOn: 0 }),
+                        end: endOfWeek(mEnd, { weekStartsOn: 0 }),
+                      });
+                      return days.map(day => {
+                        const ds = format(day, 'yyyy-MM-dd');
+                        const inMonth = isSameMonth(day, dayOffCalendarDate);
+                        const selected = dayOffSelectedDates.has(ds);
+                        const alreadyOff = staffDaysOff.some(
+                          d => d.staffId === String(dayOffStaffSlot) && d.date === ds
+                        );
+                        return (
+                          <button
+                            key={ds}
+                            onClick={() => inMonth && !alreadyOff && toggleDayOffDate(ds)}
+                            className={`aspect-square p-1 text-xs font-bold transition relative ${
+                              !inMonth ? 'text-gray-200 cursor-default' :
+                              alreadyOff ? 'bg-orange-100 text-orange-400 cursor-not-allowed' :
+                              selected ? 'bg-orange-500 text-white' :
+                              'hover:bg-orange-50 text-gray-700'
+                            }`}
+                            disabled={!inMonth}
+                            title={alreadyOff ? '이미 등록된 휴무' : ''}
+                          >
+                            {format(day, 'd')}
+                            {alreadyOff && <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-orange-400" />}
+                          </button>
+                        );
+                      });
+                    })()}
+                  </div>
+                </div>
+
+                {dayOffSelectedDates.size > 0 && (
+                  <div className="mt-2 flex items-center justify-between">
+                    <div className="flex flex-wrap gap-1">
+                      {Array.from(dayOffSelectedDates).sort().map(d => (
+                        <span key={d} className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-bold">
+                          {format(new Date(d + 'T00:00:00'), 'M/d')}
+                        </span>
+                      ))}
+                    </div>
+                    <button
+                      onClick={() => setDayOffSelectedDates(new Set())}
+                      className="text-xs text-gray-400 hover:text-red-500 font-bold ml-2 flex-shrink-0"
+                    >
+                      전체 해제
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* 현재 이 직원의 이번달 휴무 목록 */}
+              {(() => {
+                const ym = format(dayOffCalendarDate, 'yyyy-MM');
+                const myOffs = staffDaysOff
+                  .filter(d => d.staffId === String(dayOffStaffSlot) && d.date.startsWith(ym))
+                  .sort((a, b) => a.date.localeCompare(b.date));
+                if (myOffs.length === 0) return null;
+                return (
+                  <div>
+                    <p className="text-xs font-bold text-gray-500 mb-2">
+                      {staffMembers[dayOffStaffSlot - 1]?.name || ''} — {format(dayOffCalendarDate, 'M월')} 등록된 휴무 ({myOffs.length}일)
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {myOffs.map(off => (
+                        <div key={off.id} className="flex items-center gap-1 bg-orange-50 border border-orange-200 rounded-lg px-2 py-1">
+                          <span className="text-xs font-bold text-orange-700">
+                            {format(new Date(off.date + 'T00:00:00'), 'M/d (EEE)', { locale: ko })}
+                          </span>
+                          <button
+                            onClick={() => deleteDayOff(off.id)}
+                            className="w-4 h-4 flex items-center justify-center rounded-full bg-orange-200 hover:bg-red-400 hover:text-white text-orange-600 text-[10px] transition"
+                            title="삭제"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* 하단 버튼 */}
+            <div className="px-5 py-4 border-t border-gray-100 flex gap-3 flex-shrink-0">
+              <button
+                onClick={() => setDayOffModal(false)}
+                className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition text-sm"
+              >
+                닫기
+              </button>
+              <button
+                onClick={saveDaysOff}
+                disabled={isSavingStaff || dayOffSelectedDates.size === 0}
+                className="flex-1 py-3 bg-orange-500 hover:bg-orange-600 text-white font-extrabold rounded-xl transition text-sm disabled:opacity-40"
+              >
+                {isSavingStaff ? '저장 중...' : `💾 ${dayOffSelectedDates.size}일 휴무 저장`}
               </button>
             </div>
           </div>

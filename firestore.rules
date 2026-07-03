@@ -46,6 +46,18 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // 직원 명단 (1~10번 이름 등록): 읽기는 누구나, 쓰기는 매니저 이상
+    match /staffMembers/{docId} {
+      allow read: if true;
+      allow write: if isManager();
+    }
+
+    // 직원 휴무 기록: 읽기는 누구나(공개 일정표용), 쓰기는 매니저 이상
+    match /staffDaysOff/{docId} {
+      allow read: if true;
+      allow write: if isManager();
+    }
+
     // 나머지 모든 컬렉션: 기본 차단
     match /{document=**} {
       allow read, write: if false;

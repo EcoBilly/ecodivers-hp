@@ -25,6 +25,14 @@ interface Booking {
   cameraRental?: boolean;
 }
 
+// 직원 휴무 인터페이스 (읽기 전용)
+interface StaffDayOff {
+  id: string;
+  staffId: string;
+  staffName: string;
+  date: string;
+}
+
 export default function PublicSchedulePage() {
   const [isClient, setIsClient] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -36,7 +44,10 @@ export default function PublicSchedulePage() {
     date: string;
     categorySummary: Record<string, Record<string, number>>;
     dayBookings: Booking[];
+    dayOffs: StaffDayOff[];
   } | null>(null);
+
+  const [staffDaysOff, setStaffDaysOff] = useState<StaffDayOff[]>([]);
 
   const monthStart = startOfMonth(currentDate);
   const monthEnd = endOfMonth(currentDate);
@@ -46,7 +57,12 @@ export default function PublicSchedulePage() {
 
   const prevMonth = () => setCurrentDate(subMonths(currentDate, 1));
   const nextMonth = () => setCurrentDate(addMonths(currentDate, 1));
-  const goToday = () => setCurrentDate(new Date());
+  const goToday = () => {
+    const today = new Date();
+    setCurrentDate(today);
+    // openDayModal이 아래쪽에 선언되어 있지만 onClick 시점에 호출되므로 문제없음
+    openDayModal(today);
+  };
 
   // Firebase 실시간 구독 (읽기 전용)
   useEffect(() => {
@@ -63,7 +79,16 @@ export default function PublicSchedulePage() {
       console.error("Firestore Error:", error);
       setLoading(false);
     });
-    return () => unsubscribe();
+
+    // 직원 휴무 구독 (읽기 전용 — bookings 컨렉션 미팅치)
+    const unsubscribeDaysOff = onSnapshot(collection(db, "staffDaysOff"), (snap) => {
+      setStaffDaysOff(snap.docs.map(d => ({ id: d.id, ...d.data() } as StaffDayOff)));
+    }, () => { /* 읽기 실패 시 화면에 영향 없이 무시 */ });
+
+    return () => {
+      unsubscribe();
+      unsubscribeDaysOff();
+    };
   }, []);
 
   // 모달 열릴 때 배경 스크롤 방지
@@ -88,6 +113,7 @@ export default function PublicSchedulePage() {
   const openDayModal = (day: Date) => {
     const dateStr = format(day, "yyyy-MM-dd");
     const dayBookings = bookings.filter(b => b.date === dateStr);
+    const dayOffs = staffDaysOff.filter(d => d.date === dateStr);
 
     const categorySummary: Record<string, Record<string, number>> = {};
     dayBookings.forEach(b => {
@@ -95,7 +121,9 @@ export default function PublicSchedulePage() {
       categorySummary[b.category][b.time] = (categorySummary[b.category][b.time] || 0) + b.pax;
     });
 
-    setSummaryModal({ date: dateStr, categorySummary, dayBookings });
+    // 예약도 휴무도 없으면 모달 없음
+    if (dayBookings.length === 0 && dayOffs.length === 0) return;
+    setSummaryModal({ date: dateStr, categorySummary, dayBookings, dayOffs });
   };
 
   if (!isClient) return null;
@@ -210,11 +238,24 @@ export default function PublicSchedulePage() {
                       <span className={`text-sm font-bold w-7 h-7 flex items-center justify-center rounded-full ${isSameDay(day, new Date()) ? 'bg-blue-600 text-white' : 'text-gray-700'}`}>
                         {format(day, 'd')}
                       </span>
-                      {dayBookings.length > 0 && (
-                        <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">
-                          {dayBookings.reduce((s, b) => s + b.pax, 0)}명
-                        </span>
-                      )}
+                      <div className="flex flex-col items-end gap-0.5">
+                        {dayBookings.length > 0 && (
+                          <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">
+                            {dayBookings.reduce((s, b) => s + b.pax, 0)}명
+                          </span>
+                        )}
+                        {/* 휴무 인원 배지 (모바일 최적화) */}
+                        {(() => {
+                          const dateStr = format(day, 'yyyy-MM-dd');
+                          const dayOffs = staffDaysOff.filter(d => d.date === dateStr);
+                          if (dayOffs.length === 0) return null;
+                          return (
+                            <span className="text-[10px] font-bold bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                              🔴 휴무 {dayOffs.length}명
+                            </span>
+                          );
+                        })()}
+                      </div>
                     </div>
 
                     <div className="space-y-1.5 overflow-y-auto max-h-[100px]">
@@ -317,7 +358,10 @@ export default function PublicSchedulePage() {
                   {format(new Date(summaryModal.date + 'T00:00:00'), 'M월 d일 (EEE)', { locale: ko })} 일정
                 </h3>
                 <p className="text-xs text-blue-200 mt-0.5">
-                  총 {summaryModal.dayBookings.reduce((s, b) => s + b.pax, 0)}명
+                  예약 {summaryModal.dayBookings.reduce((s, b) => s + b.pax, 0)}명
+                  {summaryModal.dayOffs.length > 0 && (
+                    <span className="ml-2 text-orange-200">🔴 휴무 {summaryModal.dayOffs.length}명</span>
+                  )}
                 </p>
               </div>
               <button
@@ -414,6 +458,23 @@ export default function PublicSchedulePage() {
                       })}
                     </tbody>
                   </table>
+                </div>
+              )}
+
+              {/* 휴무 직원 섹션 */}
+              {summaryModal.dayOffs.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-orange-100">
+                  <p className="text-xs font-bold text-orange-500 mb-3">휴무 직원 ({summaryModal.dayOffs.length}명)</p>
+                  <div className="flex flex-wrap gap-2">
+                    {summaryModal.dayOffs.map(off => (
+                      <span
+                        key={off.id}
+                        className="inline-flex items-center gap-1.5 bg-orange-50 border border-orange-200 text-orange-700 text-xs font-bold px-3 py-1.5 rounded-full"
+                      >
+                        🔴 {off.staffName}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

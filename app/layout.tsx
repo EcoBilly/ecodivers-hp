@@ -16,6 +16,16 @@ export const metadata: Metadata = {
     locale: "ko_KR",
     type: "website",
   },
+  // 개발/미완성 단계: 전체 사이트 검색엔진 노출 차단
+  // 웹사이트 완성 후 이 라인 제거
+  robots: {
+    index: false,
+    follow: false,
+    googleBot: {
+      index: false,
+      follow: false,
+    },
+  },
 };
 
 export default function RootLayout({

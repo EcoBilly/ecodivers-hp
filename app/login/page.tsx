@@ -18,7 +18,11 @@ function LoginForm() {
 
   useEffect(() => {
     setIsClient(true);
-  }, []);
+    // 권한 없는 접근 시도로 리다이렉트된 경우 안내 메시지
+    if (searchParams.get('reason') === 'unauthorized') {
+      setError('접근 권한이 없습니다. 관리자 계정으로 로그인해주세요.');
+    }
+  }, [searchParams]);
 
   const withTimeout = <T,>(promise: Promise<T>, timeoutMs: number = 10000): Promise<T> => {
     return Promise.race([

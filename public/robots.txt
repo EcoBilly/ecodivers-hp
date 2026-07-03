@@ -1,0 +1,14 @@
+User-agent: *
+# 관리자, 로그인, API 페이지 검색엔진 수집 차단
+Disallow: /admin/
+Disallow: /admin/schedule
+Disallow: /admin/settlement
+Disallow: /admin/checkin-settings
+Disallow: /login
+Disallow: /api/
+Disallow: /checkin
+
+# 메인 페이지만 허용 (웹사이트 완성 후 아래 라인 제거)
+Allow: /
+
+Sitemap: https://ecodivers-hp.vercel.app/sitemap.xml
