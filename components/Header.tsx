@@ -191,8 +191,15 @@ export default function Header() {
                 className="ml-6 px-6 py-2.5 bg-[#006BD6] hover:bg-[#004fa3] text-white text-[12px] font-bold tracking-widest uppercase rounded-none transition-all duration-300 shadow-lg shadow-blue-600/20"
                 style={{ fontFamily: "'Montserrat', sans-serif" }}
               >
-                BOOK NOW
+                NAVER BOOK
               </a>
+              <Link
+                href="/booking/qr"
+                className="ml-2 px-6 py-2.5 bg-gray-900 hover:bg-black text-white text-[12px] font-bold tracking-widest uppercase rounded-none transition-all duration-300 shadow-lg shadow-gray-900/20"
+                style={{ fontFamily: "'Montserrat', sans-serif" }}
+              >
+                GLOBAL BOOK
+              </Link>
             </nav>
 
             {/* Hamburger */}
@@ -247,15 +254,24 @@ export default function Header() {
               <span className="opacity-30">|</span>
               <a href="http://pf.kakao.com/_xgpxexnxj" target="_blank" rel="noopener noreferrer" className="hover:text-[#006BD6]">KAKAOTALK</a>
             </div>
-            <div className="px-6 pt-4 pb-3 flex gap-3">
+            <div className="px-6 pt-4 pb-1 flex flex-col gap-2">
               <a
                 href="https://smartstore.naver.com/divershop"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex-1 py-3 bg-[#006BD6] text-white text-center text-sm font-bold tracking-wider"
+                className="py-3 bg-[#006BD6] text-white text-center text-sm font-bold tracking-wider"
               >
-                BOOK NOW
+                NAVER BOOK
               </a>
+              <Link
+                href="/booking/qr"
+                onClick={() => setIsOpen(false)}
+                className="py-3 bg-gray-900 text-white text-center text-sm font-bold tracking-wider"
+              >
+                GLOBAL BOOK
+              </Link>
+            </div>
+            <div className="px-6 pt-1 pb-4 flex">
               <Link
                 href="/login"
                 onClick={() => setIsOpen(false)}
