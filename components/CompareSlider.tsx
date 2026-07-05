@@ -66,7 +66,7 @@ export default function CompareSlider({
       
       {/* Overlay/Processed Image */}
       <div 
-        className="absolute inset-0 w-full h-full bg-cover bg-center transition-opacity duration-200"
+        className="absolute inset-0 w-full h-full bg-cover bg-center"
         style={{ 
           backgroundImage: `url(${processedImage})`,
           clipPath: `inset(0 ${100 - sliderPosition}% 0 0)`,
