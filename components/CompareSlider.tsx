@@ -66,13 +66,17 @@ export default function CompareSlider({
       
       {/* Overlay/Processed Image */}
       <div 
-        className="absolute inset-0 w-full h-full bg-cover bg-center"
-        style={{ 
-          backgroundImage: `url(${processedImage})`,
-          clipPath: `inset(0 ${100 - sliderPosition}% 0 0)`,
-          opacity: showOriginal ? 0 : strength / 100,
-        }}
-      />
+        className="absolute inset-0 w-full h-full"
+        style={{ clipPath: `inset(0 ${100 - sliderPosition}% 0 0)` }}
+      >
+        <div 
+          className="absolute inset-0 w-full h-full bg-cover bg-center"
+          style={{ 
+            backgroundImage: `url(${processedImage})`,
+            opacity: showOriginal ? 0 : strength / 100,
+          }}
+        />
+      </div>
       
       {/* Slider Handle (Hide if showOriginal is true) */}
       {!showOriginal && (
