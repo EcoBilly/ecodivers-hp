@@ -64,47 +64,86 @@ export const processImageWithWorker = (
   });
 };
 
-export const downloadImageWithWatermark = (imageUrl: string, filename: string) => {
-  const img = new Image();
-  img.crossOrigin = 'anonymous';
-  img.src = imageUrl;
+export const downloadImageWithWatermark = (
+  originalUrl: string, 
+  processedUrl: string, 
+  filename: string,
+  strength: number = 100,
+  addWatermark: boolean = true
+) => {
+  const originalImg = new Image();
+  const processedImg = new Image();
   
-  img.onload = () => {
-    const canvas = document.createElement('canvas');
-    canvas.width = img.width;
-    canvas.height = img.height;
-    const ctx = canvas.getContext('2d');
-    
-    if (!ctx) return;
-    
-    // Draw original processed image
-    ctx.drawImage(img, 0, 0);
-    
-    // Add Watermark
-    ctx.globalAlpha = 0.3; // 30% opacity
-    ctx.fillStyle = '#ffffff'; // White text
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'bottom';
-    
-    // Font size based on image height (e.g. 3% of height)
-    const fontSize = Math.max(16, Math.floor(canvas.height * 0.03));
-    ctx.font = `bold ${fontSize}px sans-serif`;
-    
-    // Position at bottom right with some padding
-    const padding = fontSize;
-    ctx.fillText('Powered by ECODIVERS JEJU', canvas.width - padding, canvas.height - padding);
-    
-    // Download
-    canvas.toBlob((blob) => {
-      if (!blob) return;
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }, 'image/jpeg', 0.95);
+  originalImg.crossOrigin = 'anonymous';
+  processedImg.crossOrigin = 'anonymous';
+
+  let loadedImages = 0;
+  const onImageLoad = () => {
+    loadedImages++;
+    if (loadedImages === 2) {
+      const canvas = document.createElement('canvas');
+      canvas.width = originalImg.width;
+      canvas.height = originalImg.height;
+      const ctx = canvas.getContext('2d');
+      
+      if (!ctx) return;
+      
+      // Draw original image as base
+      ctx.drawImage(originalImg, 0, 0);
+      
+      // Draw processed image on top with opacity based on strength
+      ctx.globalAlpha = strength / 100;
+      ctx.drawImage(processedImg, 0, 0);
+      
+      // Reset alpha for watermark
+      ctx.globalAlpha = 1.0;
+      
+      // Add Watermark if enabled
+      if (addWatermark) {
+        ctx.globalAlpha = 0.5; // 50% opacity
+        ctx.fillStyle = '#ffffff'; // White text
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'bottom';
+        
+        // Font size based on image height (e.g. 3% of height)
+        const fontSize = Math.max(16, Math.floor(canvas.height * 0.03));
+        ctx.font = `bold ${fontSize}px sans-serif`;
+        
+        // Add text shadow for better visibility on bright backgrounds
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+        ctx.shadowBlur = 4;
+        ctx.shadowOffsetX = 1;
+        ctx.shadowOffsetY = 1;
+        
+        // Position at bottom right with some padding
+        const padding = fontSize;
+        ctx.fillText('Powered by ECODIVERS JEJU', canvas.width - padding, canvas.height - padding);
+        
+        // Reset shadow
+        ctx.shadowColor = 'transparent';
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
+      }
+      
+      // Download
+      canvas.toBlob((blob) => {
+        if (!blob) return;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 'image/jpeg', 0.95);
+    }
   };
+
+  originalImg.onload = onImageLoad;
+  processedImg.onload = onImageLoad;
+
+  originalImg.src = originalUrl;
+  processedImg.src = processedUrl;
 };

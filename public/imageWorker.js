@@ -5,95 +5,164 @@ self.onmessage = function (e) {
     const data = imageData.data;
     const width = imageData.width;
     const height = imageData.height;
-
-    // 1. Calculate Average Colors for Gray World White Balance
-    let totalR = 0, totalG = 0, totalB = 0;
     const numPixels = width * height;
 
+    // --- 1. Histogram Percentile Stretching (Color Balance & Contrast) ---
+    // Create histograms for R, G, B
+    const histR = new Uint32Array(256);
+    const histG = new Uint32Array(256);
+    const histB = new Uint32Array(256);
+
     for (let i = 0; i < data.length; i += 4) {
-      totalR += data[i];
-      totalG += data[i + 1];
-      totalB += data[i + 2];
+      histR[data[i]]++;
+      histG[data[i + 1]]++;
+      histB[data[i + 2]]++;
     }
 
-    const avgR = totalR / numPixels;
-    const avgG = totalG / numPixels;
-    const avgB = totalB / numPixels;
+    // Find 1st and 99th percentiles
+    const lowerBound = numPixels * 0.01;
+    const upperBound = numPixels * 0.99;
 
-    // Target average
-    const avgGray = (avgR + avgG + avgB) / 3;
-
-    // Scale factors to balance the colors
-    const maxScale = 3.5;
-    const scaleR = Math.min(maxScale, avgGray / Math.max(1, avgR));
-    const scaleG = Math.min(2.0, avgGray / Math.max(1, avgG));
-    const scaleB = Math.min(2.0, avgGray / Math.max(1, avgB));
-
-    const correctedData = new Uint8ClampedArray(data.length);
-
-    // Apply Color Correction and Contrast
-    const contrast = 1.2; 
-    const intercept = 128 * (1 - contrast);
-
-    for (let i = 0; i < data.length; i += 4) {
-      let r = data[i] * scaleR;
-      let g = data[i + 1] * scaleG;
-      let b = data[i + 2] * scaleB;
-
-      // Red Compensation
-      if (r < g) {
-        r = r + (g - r) * 0.3; 
+    function getPercentiles(hist) {
+      let min = 0, max = 255;
+      let count = 0;
+      for (let i = 0; i < 256; i++) {
+        count += hist[i];
+        if (count > lowerBound) { min = i; break; }
       }
-
-      // Apply Contrast
-      r = r * contrast + intercept;
-      g = g * contrast + intercept;
-      b = b * contrast + intercept;
-
-      correctedData[i] = Math.min(255, Math.max(0, r));
-      correctedData[i + 1] = Math.min(255, Math.max(0, g));
-      correctedData[i + 2] = Math.min(255, Math.max(0, b));
-      correctedData[i + 3] = data[i + 3]; // Alpha
+      count = 0;
+      for (let i = 255; i >= 0; i--) {
+        count += hist[i];
+        if (count > numPixels - upperBound) { max = i; break; }
+      }
+      return { min, max: Math.max(min + 1, max) };
     }
 
-    // 2. Fast Pseudo-Median Filter for Denoising (Backscatter)
+    const limitsR = getPercentiles(histR);
+    const limitsG = getPercentiles(histG);
+    const limitsB = getPercentiles(histB);
+
+    // Apply Stretching & Saturation Boost
+    const saturationBoost = 1.25; // Boost saturation by 25%
+    const tempBuffer = new Uint8ClampedArray(data.length);
+
+    for (let i = 0; i < data.length; i += 4) {
+      // Stretch to full 0-255 range
+      let r = (data[i] - limitsR.min) * 255 / (limitsR.max - limitsR.min);
+      let g = (data[i + 1] - limitsG.min) * 255 / (limitsG.max - limitsG.min);
+      let b = (data[i + 2] - limitsB.min) * 255 / (limitsB.max - limitsB.min);
+
+      // Clamp
+      r = Math.max(0, Math.min(255, r));
+      g = Math.max(0, Math.min(255, g));
+      b = Math.max(0, Math.min(255, b));
+
+      // Saturation
+      const avg = (r + g + b) / 3;
+      r = avg + (r - avg) * saturationBoost;
+      g = avg + (g - avg) * saturationBoost;
+      b = avg + (b - avg) * saturationBoost;
+
+      tempBuffer[i] = r;
+      tempBuffer[i + 1] = g;
+      tempBuffer[i + 2] = b;
+      tempBuffer[i + 3] = data[i + 3];
+    }
+
+    // --- 2. Denoising (3x3 Median Filter for Backscatter) ---
+    const medianBuffer = new Uint8ClampedArray(data.length);
+    const getIdx = (x, y) => (y * width + x) * 4;
+
+    const rVals = new Int32Array(9);
+    const gVals = new Int32Array(9);
+    const bVals = new Int32Array(9);
+
     for (let y = 1; y < height - 1; y++) {
       for (let x = 1; x < width - 1; x++) {
-        const i = (y * width + x) * 4;
+        const i = getIdx(x, y);
         
-        const idx = [
-          i - width * 4,     // Top
-          i + width * 4,     // Bottom
-          i - 4,             // Left
-          i + 4,             // Right
-          i                  // Center
-        ];
-
-        const rVals = [correctedData[idx[0]], correctedData[idx[1]], correctedData[idx[2]], correctedData[idx[3]], correctedData[idx[4]]];
-        const gVals = [correctedData[idx[0]+1], correctedData[idx[1]+1], correctedData[idx[2]+1], correctedData[idx[3]+1], correctedData[idx[4]+1]];
-        const bVals = [correctedData[idx[0]+2], correctedData[idx[1]+2], correctedData[idx[2]+2], correctedData[idx[3]+2], correctedData[idx[4]+2]];
-
-        rVals.sort((a, b) => a - b);
-        gVals.sort((a, b) => a - b);
-        bVals.sort((a, b) => a - b);
-
-        data[i] = rVals[2];
-        data[i + 1] = gVals[2];
-        data[i + 2] = bVals[2];
-        data[i + 3] = correctedData[i + 3];
+        let idx = 0;
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const pIdx = getIdx(x + dx, y + dy);
+            rVals[idx] = tempBuffer[pIdx];
+            gVals[idx] = tempBuffer[pIdx+1];
+            bVals[idx] = tempBuffer[pIdx+2];
+            idx++;
+          }
+        }
+        
+        rVals.sort();
+        gVals.sort();
+        bVals.sort();
+        
+        medianBuffer[i] = rVals[4];
+        medianBuffer[i+1] = gVals[4];
+        medianBuffer[i+2] = bVals[4];
+        medianBuffer[i+3] = tempBuffer[i+3];
       }
     }
 
-    // Handle borders (copy corrected data directly)
+    // Copy edges for median buffer
+    for (let x = 0; x < width; x++) {
+      const topIdx = getIdx(x, 0);
+      const bottomIdx = getIdx(x, height - 1);
+      for(let j=0; j<4; j++) {
+        medianBuffer[topIdx+j] = tempBuffer[topIdx+j];
+        medianBuffer[bottomIdx+j] = tempBuffer[bottomIdx+j];
+      }
+    }
     for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        if (x === 0 || y === 0 || x === width - 1 || y === height - 1) {
-           const i = (y * width + x) * 4;
-           data[i] = correctedData[i];
-           data[i+1] = correctedData[i+1];
-           data[i+2] = correctedData[i+2];
-           data[i+3] = correctedData[i+3];
+      const leftIdx = getIdx(0, y);
+      const rightIdx = getIdx(width - 1, y);
+      for(let j=0; j<4; j++) {
+        medianBuffer[leftIdx+j] = tempBuffer[leftIdx+j];
+        medianBuffer[rightIdx+j] = tempBuffer[rightIdx+j];
+      }
+    }
+
+    // --- 3. Sharpening (Unsharp Mask via 3x3 Convolution) ---
+    // Kernel:
+    //  0 -1  0
+    // -1  5 -1
+    //  0 -1  0
+    const sharpenAmount = 0.6; // Adjust sharpening intensity
+    
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        const i = getIdx(x, y);
+        
+        for (let c = 0; c < 3; c++) {
+           const top = medianBuffer[getIdx(x, y-1) + c];
+           const bottom = medianBuffer[getIdx(x, y+1) + c];
+           const left = medianBuffer[getIdx(x-1, y) + c];
+           const right = medianBuffer[getIdx(x+1, y) + c];
+           const center = medianBuffer[i + c];
+           
+           let sharpened = center * 5 - (top + bottom + left + right);
+           let finalVal = center + (sharpened - center) * sharpenAmount;
+           
+           data[i + c] = Math.max(0, Math.min(255, finalVal));
         }
+        data[i + 3] = medianBuffer[i + 3]; // Preserve alpha
+      }
+    }
+
+    // Copy edges for final data
+    for (let x = 0; x < width; x++) {
+      const topIdx = getIdx(x, 0);
+      const bottomIdx = getIdx(x, height - 1);
+      for(let j=0; j<4; j++) {
+        data[topIdx+j] = medianBuffer[topIdx+j];
+        data[bottomIdx+j] = medianBuffer[bottomIdx+j];
+      }
+    }
+    for (let y = 0; y < height; y++) {
+      const leftIdx = getIdx(0, y);
+      const rightIdx = getIdx(width - 1, y);
+      for(let j=0; j<4; j++) {
+        data[leftIdx+j] = medianBuffer[leftIdx+j];
+        data[rightIdx+j] = medianBuffer[rightIdx+j];
       }
     }
 
