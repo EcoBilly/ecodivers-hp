@@ -10,6 +10,7 @@ const navItems = [
   { label: "패키지", href: "#packages" },
   { label: "커뮤니티", href: "#community" },
   { label: "에코소개", href: "#about" },
+  { label: "AI 사진보정", href: "/underwater-enhancer" },
 ];
 
 export default function Header() {
