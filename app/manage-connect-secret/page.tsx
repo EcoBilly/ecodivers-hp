@@ -138,7 +138,7 @@ export default function ManageConnectPage() {
   const addLink = () => {
     const newLink: LinkItem = {
       id: Date.now().toString(),
-      title: 'New Link',
+      title: '새 링크',
       url: 'https://',
       iconType: 'website',
       isActive: true,
