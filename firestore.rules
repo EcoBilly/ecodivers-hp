@@ -58,6 +58,11 @@ service cloud.firestore {
       allow write: if isManager();
     }
 
+    // 모바일 명함 시스템 독립 데이터: 누구나 읽기, 쓰기는 클라이언트에서 직접(임시 허용 혹은 API 통해 우회)
+    match /mobile_connect_isolated/{docId} {
+      allow read, write: if true;
+    }
+
     // 나머지 모든 컬렉션: 기본 차단
     match /{document=**} {
       allow read, write: if false;
