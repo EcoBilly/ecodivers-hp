@@ -1,0 +1,33 @@
+[debug] [2026-07-09T15:07:38.174Z] ----------------------------------------------------------------------
+[debug] [2026-07-09T15:07:38.180Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\User\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js deploy
+[debug] [2026-07-09T15:07:38.181Z] CLI Version:   15.22.1
+[debug] [2026-07-09T15:07:38.181Z] Platform:      win32
+[debug] [2026-07-09T15:07:38.182Z] Node Version:  v22.15.0
+[debug] [2026-07-09T15:07:38.182Z] Detected Agent: antigravity
+[debug] [2026-07-09T15:07:38.182Z] Time:          Fri Jul 10 2026 00:07:38 GMT+0900 (대한민국 표준시)
+[debug] [2026-07-09T15:07:38.183Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-07-09T15:07:46.771Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-07-09T15:07:46.777Z] > authorizing via signed-in user (a01095373373@gmail.com)
+[debug] [2026-07-09T15:07:46.778Z] [iam] checking project ecodivers-61b6f for permissions ["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get","firebasehosting.sites.update"]
+[debug] [2026-07-09T15:07:46.784Z] Checked if tokens are valid: true, expires at: 1783612605363
+[debug] [2026-07-09T15:07:46.784Z] Checked if tokens are valid: true, expires at: 1783612605363
+[debug] [2026-07-09T15:07:46.787Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/ecodivers-61b6f:testIamPermissions [none]
+[debug] [2026-07-09T15:07:46.788Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/ecodivers-61b6f:testIamPermissions  x-goog-user-project=ecodivers-61b6f
+[debug] [2026-07-09T15:07:46.790Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/ecodivers-61b6f:testIamPermissions {"permissions":["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get","firebasehosting.sites.update"]}
+[debug] [2026-07-09T15:07:47.223Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/ecodivers-61b6f:testIamPermissions 200
+[debug] [2026-07-09T15:07:47.223Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/ecodivers-61b6f:testIamPermissions {"permissions":["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get","firebasehosting.sites.update"]}
+[debug] [2026-07-09T15:07:47.225Z] Checked if tokens are valid: true, expires at: 1783612605363
+[debug] [2026-07-09T15:07:47.225Z] Checked if tokens are valid: true, expires at: 1783612605363
+[debug] [2026-07-09T15:07:47.226Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/ecodivers-61b6f [none]
+[debug] [2026-07-09T15:07:47.712Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/ecodivers-61b6f 200
+[debug] [2026-07-09T15:07:47.712Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/ecodivers-61b6f {"projectId":"ecodivers-61b6f","projectNumber":"456756337579","displayName":"ecodivers","name":"projects/ecodivers-61b6f","resources":{"hostingSite":"ecodivers-61b6f"},"state":"ACTIVE","labels":{"firebase":"enabled"},"etag":"1_587d48d3-d0c8-4852-89b1-049bea4f1d95"}
+[info] 
+[info] === Deploying to 'ecodivers-61b6f'...
+[info] 
+[info] i  deploying firestore, hosting 
+[info] i  firestore: ensuring required API firestore.googleapis.com is enabled... 
+[info] i  firestore: ensuring required API firestore.googleapis.com is enabled... 
+[debug] [2026-07-09T15:07:47.720Z] Checked if tokens are valid: true, expires at: 1783612605363
+[debug] [2026-07-09T15:07:47.720Z] Checked if tokens are valid: true, expires at: 1783612605363
+[debug] [2026-07-09T15:07:47.720Z] >>> [apiv2][query] GET https://firestore.googleapis.com/v1/projects/ecodivers-61b6f/databases/(default) [none]

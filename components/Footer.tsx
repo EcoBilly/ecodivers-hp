@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Instagram, MessageCircle, Phone, MapPin, Mail } from "lucide-react";
 
 const footerLinks = {
@@ -10,6 +11,12 @@ const footerLinks = {
 };
 
 export default function Footer() {
+  const pathname = usePathname();
+
+  if (pathname?.startsWith("/connect") || pathname?.startsWith("/manage-connect-secret")) {
+    return null;
+  }
+
   return (
     <footer className="bg-[#0a1628] text-gray-400">
       {/* CTA Banner */}

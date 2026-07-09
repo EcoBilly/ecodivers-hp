@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { usePathname } from "next/navigation";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { format, addDays, parseISO } from "date-fns";
@@ -132,6 +133,7 @@ const SYSTEM_PROMPT = `당신은 제주도 다이빙 센터 '에코다이버스'
 6. 한국어로 답변하세요.`;
 
 export default function ChatbotWidget() {
+  const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -146,6 +148,10 @@ export default function ChatbotWidget() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+
+  if (pathname?.startsWith("/connect") || pathname?.startsWith("/manage-connect-secret")) {
+    return null;
+  }
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });

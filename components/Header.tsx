@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 const navItems = [
   { label: "다이빙", href: "#diving" },
@@ -14,8 +15,13 @@ const navItems = [
 ];
 
 export default function Header() {
+  const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
+
+  if (pathname?.startsWith("/connect") || pathname?.startsWith("/manage-connect-secret")) {
+    return null;
+  }
 
   useEffect(() => {
     const handleScroll = () => {
