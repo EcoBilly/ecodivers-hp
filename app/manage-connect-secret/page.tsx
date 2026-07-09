@@ -1,9 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { db, app } from '@/lib/firebase';
+import { db } from '@/lib/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { getBrandIcon } from '@/components/connect/BrandIcons';
 import { Trash2, ArrowUp, ArrowDown, Plus, Image as ImageIcon, Save, LogOut } from 'lucide-react';
 
@@ -51,8 +50,6 @@ export default function ManageConnectPage() {
   const [links, setLinks] = useState<LinkItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  
-  const storage = getStorage(app);
 
   // Authentication
   const handleLogin = async (e: React.FormEvent) => {
@@ -110,27 +107,35 @@ export default function ManageConnectPage() {
     setSaving(false);
   };
 
-  // File Upload
+  // File Upload (서버 사이드 API 경유 → CORS 우회)
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'bg' | 'profile') => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     try {
-      // Use timestamp to make filename unique
       const timestamp = new Date().getTime();
-      const storageRef = ref(storage, `mobile-connect/${type}_${timestamp}_${file.name}`);
-      
-      const snapshot = await uploadBytes(storageRef, file);
-      const downloadURL = await getDownloadURL(snapshot.ref);
-      
+      const path = `mobile-connect/${type}_${timestamp}_${file.name}`;
+
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('path', path);
+
+      const res = await fetch('/api/upload-connect-image', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!res.ok) throw new Error('Upload API failed');
+      const { url } = await res.json();
+
       if (type === 'bg') {
-        setProfile({ ...profile, bgImageUrl: downloadURL, useSolidBg: false });
+        setProfile({ ...profile, bgImageUrl: url, useSolidBg: false });
       } else {
-        setProfile({ ...profile, profileImageUrl: downloadURL });
+        setProfile({ ...profile, profileImageUrl: url });
       }
     } catch (error) {
       console.error("Upload error:", error);
-      alert('이미지 업로드에 실패했습니다.');
+      alert('이미지 업로드에 실패했습니다. 잠시 후 다시 시도해주세요.');
     }
   };
 

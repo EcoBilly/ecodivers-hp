@@ -1,0 +1,14 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // mobile-connect 폴더: 어드민 페이지에서만 업로드, 누구나 읽기 가능
+    match /mobile-connect/{allPaths=**} {
+      allow read: if true;
+      allow write: if true;
+    }
+    // 나머지 경로는 차단
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

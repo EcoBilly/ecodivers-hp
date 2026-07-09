@@ -1,14 +1,16 @@
 import * as admin from 'firebase-admin';
 
+let _app: admin.app.App | null = null;
 let _db: admin.firestore.Firestore | null = null;
 
-export function getDbAdmin(): admin.firestore.Firestore | null {
-  if (_db) return _db;
+function getAdminApp(): admin.app.App | null {
+  if (_app) return _app;
 
   try {
     const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
     const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
     const privateKeyRaw = process.env.FIREBASE_PRIVATE_KEY;
+    const storageBucket = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
 
     if (!projectId || !clientEmail || !privateKeyRaw) {
       console.warn('[FirebaseAdmin] Missing env vars:', {
@@ -19,24 +21,36 @@ export function getDbAdmin(): admin.firestore.Firestore | null {
       return null;
     }
 
-    // 실제 개행(\n)으로 저장된 키를 그대로 사용.
-    // 혹시 이스케이프된 \n(백슬래시+n)이 섞여있어도 모두 개행으로 변환.
     const privateKey = privateKeyRaw.split(String.fromCharCode(92) + 'n').join('\n');
 
     const existingApp = admin.apps.find(a => a?.name === '[DEFAULT]');
     if (existingApp) {
-      _db = existingApp.firestore();
+      _app = existingApp;
     } else {
-      const app = admin.initializeApp({
+      _app = admin.initializeApp({
         credential: admin.credential.cert({ projectId, clientEmail, privateKey }),
+        storageBucket: storageBucket || `${projectId}.firebasestorage.app`,
       });
-      _db = app.firestore();
       console.log('[FirebaseAdmin] Initialized for project:', projectId);
     }
 
-    return _db;
+    return _app;
   } catch (error) {
     console.error('[FirebaseAdmin] Initialization Error:', error);
     return null;
   }
+}
+
+export function getDbAdmin(): admin.firestore.Firestore | null {
+  if (_db) return _db;
+  const app = getAdminApp();
+  if (!app) return null;
+  _db = app.firestore();
+  return _db;
+}
+
+export function getStorageAdmin(): admin.storage.Storage | null {
+  const app = getAdminApp();
+  if (!app) return null;
+  return admin.storage(app);
 }
