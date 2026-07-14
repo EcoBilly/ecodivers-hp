@@ -89,11 +89,13 @@ export const downloadImageWithWatermark = (
       if (!ctx) return;
       
       // Draw original image as base
-      ctx.drawImage(originalImg, 0, 0);
+      ctx.drawImage(originalImg, 0, 0, canvas.width, canvas.height);
       
       // Draw processed image on top with opacity based on strength
+      // Must specify canvas dimensions to stretch processedImg to full size,
+      // since it may have been downscaled (max 2048px) during processing.
       ctx.globalAlpha = strength / 100;
-      ctx.drawImage(processedImg, 0, 0);
+      ctx.drawImage(processedImg, 0, 0, canvas.width, canvas.height);
       
       // Reset alpha for watermark
       ctx.globalAlpha = 1.0;
