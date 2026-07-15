@@ -67,8 +67,17 @@ export default function AdminSchedulePage() {
   // 현황 요약 모달
   const [summaryModal, setSummaryModal] = useState<{ date: string; categorySummary: Record<string, Record<string, number>> } | null>(null);
   const router = useRouter();
-  const [pageTab, setPageTab] = useState<'calendar' | 'settlement'>('calendar');
+  const [pageTab, setPageTab] = useState<'calendar' | 'settlement' | 'cancellation'>('calendar');
   const [cancelledBookings, setCancelledBookings] = useState<Booking[]>([]);
+  // 정산/매출 비밀번호 잠금
+  const [settlementUnlocked, setSettlementUnlocked] = useState(false);
+  const [settlementPwInput, setSettlementPwInput] = useState('');
+  const [settlementPwError, setSettlementPwError] = useState(false);
+  // 취소조회 필터
+  const [cancelFilterMode, setCancelFilterMode] = useState<'monthly' | 'range'>('monthly');
+  const [cancelFilterMonth, setCancelFilterMonth] = useState<string>(() => format(new Date(), 'yyyy-MM'));
+  const [cancelFilterStart, setCancelFilterStart] = useState<string>('');
+  const [cancelFilterEnd, setCancelFilterEnd] = useState<string>('');
 
   // 직원 휴무 관련 State
   const [staffMembers, setStaffMembers] = useState<StaffMember[]>(
@@ -300,6 +309,7 @@ export default function AdminSchedulePage() {
   const openEditModal = (booking: Booking, e: React.MouseEvent) => {
     e.stopPropagation();
     setEditingBooking({ ...booking });
+    setSelectedDate(booking.date); // ✅ 반드시 selectedDate도 동기화 (없으면 이전 날짜가 목록탭에 잔류함)
     setIsCustomTimeMode(!getTimeOptions(booking.category).includes(booking.time));
     setIsCustomCategoryMode(!categories.includes(booking.category));
     setIsCustomPaymentMode(booking.paymentMethod ? !paymentOptions.includes(booking.paymentMethod) : false);
@@ -853,7 +863,8 @@ export default function AdminSchedulePage() {
         {/* Page Tabs */}
         <div className="flex gap-1 mb-6 bg-white rounded-xl p-1 border border-gray-200 shadow-sm w-fit">
           <button onClick={() => setPageTab('calendar')} className={`px-6 py-2.5 rounded-lg text-sm font-extrabold transition ${pageTab === 'calendar' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>📅 캘린더</button>
-          <button onClick={() => setPageTab('settlement')} className={`px-6 py-2.5 rounded-lg text-sm font-extrabold transition ${pageTab === 'settlement' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>💰 정산/매출</button>
+          <button onClick={() => { setPageTab('settlement'); }} className={`px-6 py-2.5 rounded-lg text-sm font-extrabold transition ${pageTab === 'settlement' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>💰 정산/매출</button>
+          <button onClick={() => setPageTab('cancellation')} className={`px-6 py-2.5 rounded-lg text-sm font-extrabold transition ${pageTab === 'cancellation' ? 'bg-red-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>🚫 취소조회</button>
         </div>
 
         {pageTab === 'calendar' && <>
@@ -1005,86 +1016,203 @@ export default function AdminSchedulePage() {
         </div>
         </>}
 
-        {/* Settlement Tab */}
+        {/* Settlement Tab — 관리자 비밀번호 잠금 */}
         {pageTab === 'settlement' && (
           <div className="space-y-6">
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-              <h3 className="text-lg font-extrabold text-blue-900 mb-4">프로그램 단가 설정</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {categories.map(cat => (
-                  <div key={cat} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
-                    <span className="flex-1 text-sm font-bold text-gray-700">{cat}</span>
-                    <input type="number" value={programPrices[cat] || ''} onChange={e => saveProgramPrice(cat, parseInt(e.target.value) || 0)} onFocus={e => e.target.select()} placeholder="0" className="w-28 border border-gray-200 rounded-lg p-2 text-sm text-right outline-none focus:ring-2 focus:ring-blue-500" />
-                    <span className="text-xs text-gray-400">원/인</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-              <div className="flex items-center justify-between mb-5">
-                <h3 className="text-lg font-extrabold text-blue-900">{format(currentDate, 'yyyy년 MM월', { locale: ko })} 매출 현황</h3>
-                <div className="flex gap-2">
-                  <button onClick={prevMonth} className="px-3 py-1.5 bg-gray-100 text-gray-600 font-bold rounded-lg hover:bg-gray-200 transition text-sm">&lt;</button>
-                  <button onClick={nextMonth} className="px-3 py-1.5 bg-gray-100 text-gray-600 font-bold rounded-lg hover:bg-gray-200 transition text-sm">&gt;</button>
+            {!settlementUnlocked ? (
+              /* 비밀번호 입력 화면 */
+              <div className="flex flex-col items-center justify-center min-h-[400px]">
+                <div className="bg-white rounded-3xl shadow-xl border border-gray-100 p-10 w-full max-w-sm text-center">
+                  <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">🔒</div>
+                  <h2 className="text-xl font-black text-blue-900 mb-1">관리자 전용</h2>
+                  <p className="text-sm text-gray-400 mb-6">정산/매출 조회는 관리자만 접근 가능합니다.</p>
+                  <input
+                    type="password"
+                    value={settlementPwInput}
+                    onChange={e => { setSettlementPwInput(e.target.value); setSettlementPwError(false); }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        if (settlementPwInput === '122100') { setSettlementUnlocked(true); setSettlementPwInput(''); setSettlementPwError(false); }
+                        else setSettlementPwError(true);
+                      }
+                    }}
+                    placeholder="비밀번호 입력"
+                    className={`w-full border-2 rounded-xl p-3 text-center text-lg font-bold outline-none focus:ring-2 focus:ring-blue-500 mb-3 tracking-widest ${settlementPwError ? 'border-red-400 bg-red-50' : 'border-gray-200'}`}
+                  />
+                  {settlementPwError && <p className="text-sm text-red-500 font-bold mb-3">비밀번호가 올바르지 않습니다.</p>}
+                  <button
+                    onClick={() => {
+                      if (settlementPwInput === '122100') { setSettlementUnlocked(true); setSettlementPwInput(''); setSettlementPwError(false); }
+                      else setSettlementPwError(true);
+                    }}
+                    className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-extrabold rounded-xl transition text-sm"
+                  >
+                    확인
+                  </button>
                 </div>
               </div>
-              {(() => {
-                const ym = format(currentDate, 'yyyy-MM');
-                const mb = bookings.filter(b => b.date.startsWith(ym));
-                const mc = cancelledBookings.filter(b => b.date.startsWith(ym));
-                const bycat: Record<string, { count: number; pax: number }> = {};
-                mb.forEach(b => { if (!bycat[b.category]) bycat[b.category] = { count: 0, pax: 0 }; bycat[b.category].count++; bycat[b.category].pax += b.pax; });
-                const totalRev = Object.entries(bycat).reduce((s, [cat, d]) => s + d.pax * (programPrices[cat] || 0), 0);
-                const totalPax = Object.values(bycat).reduce((s, d) => s + d.pax, 0);
-                return (
-                  <div className="space-y-6">
-                    <table className="w-full text-left border-collapse text-sm">
-                      <thead><tr className="border-b-2 border-gray-100">
-                        <th className="pb-3 text-xs font-extrabold text-gray-400">프로그램</th>
-                        <th className="pb-3 text-xs font-extrabold text-gray-400 text-right">건수</th>
-                        <th className="pb-3 text-xs font-extrabold text-gray-400 text-right">인원</th>
-                        <th className="pb-3 text-xs font-extrabold text-gray-400 text-right">단가</th>
-                        <th className="pb-3 text-xs font-extrabold text-gray-400 text-right">매출</th>
-                      </tr></thead>
-                      <tbody>
-                        {Object.entries(bycat).map(([cat, d]) => (
-                          <tr key={cat} className="border-b border-gray-50">
-                            <td className="py-3 font-bold text-gray-800">{cat}</td>
-                            <td className="py-3 text-right text-gray-500">{d.count}건</td>
-                            <td className="py-3 text-right text-gray-500">{d.pax}명</td>
-                            <td className="py-3 text-right text-gray-400">{(programPrices[cat] || 0).toLocaleString()}원</td>
-                            <td className="py-3 text-right font-black text-blue-700">{(d.pax * (programPrices[cat] || 0)).toLocaleString()}원</td>
-                          </tr>
-                        ))}
-                        {Object.keys(bycat).length === 0 && <tr><td colSpan={5} className="py-8 text-center text-gray-400 text-sm">이 달의 예약이 없습니다.</td></tr>}
-                      </tbody>
-                      <tfoot><tr className="bg-blue-50 rounded-xl">
-                        <td className="py-3 px-2 font-extrabold text-blue-900">합계</td>
-                        <td className="py-3 text-right font-bold text-blue-900">{mb.length}건</td>
-                        <td className="py-3 text-right font-bold text-blue-900">{totalPax}명</td>
-                        <td className="py-3 text-right text-gray-400">-</td>
-                        <td className="py-3 px-2 text-right font-black text-blue-700 text-base">{totalRev.toLocaleString()}원</td>
-                      </tr></tfoot>
-                    </table>
-                    {mc.length > 0 && (
-                      <div>
-                        <h4 className="text-sm font-extrabold text-red-600 mb-3">취소 내역 ({mc.length}건)</h4>
-                        <div className="space-y-2">
-                          {mc.map(b => (
-                            <div key={b.id} className="flex items-center gap-3 p-3 bg-red-50 rounded-xl border border-red-100">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-0.5">
-                                  <span className="text-xs text-red-400 font-bold">{b.date} {b.time}</span>
-                                  <span className="text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-bold">{b.cancelReason || '취소'}</span>
-                                </div>
-                                <p className="text-sm font-bold text-gray-700">{b.name} · {b.category} · {b.pax}명</p>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
+            ) : (
+              /* 실제 정산/매출 내용 */
+              <>
+                <div className="flex justify-end">
+                  <button onClick={() => { setSettlementUnlocked(false); setSettlementPwInput(''); }} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold rounded-lg text-xs transition">🔒 잠금</button>
+                </div>
+                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+                  <h3 className="text-lg font-extrabold text-blue-900 mb-4">프로그램 단가 설정</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {categories.map(cat => (
+                      <div key={cat} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                        <span className="flex-1 text-sm font-bold text-gray-700">{cat}</span>
+                        <input type="number" value={programPrices[cat] || ''} onChange={e => saveProgramPrice(cat, parseInt(e.target.value) || 0)} onFocus={e => e.target.select()} placeholder="0" className="w-28 border border-gray-200 rounded-lg p-2 text-sm text-right outline-none focus:ring-2 focus:ring-blue-500" />
+                        <span className="text-xs text-gray-400">원/인</span>
                       </div>
-                    )}
+                    ))}
                   </div>
+                </div>
+                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+                  <div className="flex items-center justify-between mb-5">
+                    <h3 className="text-lg font-extrabold text-blue-900">{format(currentDate, 'yyyy년 MM월', { locale: ko })} 매출 현황</h3>
+                    <div className="flex gap-2">
+                      <button onClick={prevMonth} className="px-3 py-1.5 bg-gray-100 text-gray-600 font-bold rounded-lg hover:bg-gray-200 transition text-sm">&lt;</button>
+                      <button onClick={nextMonth} className="px-3 py-1.5 bg-gray-100 text-gray-600 font-bold rounded-lg hover:bg-gray-200 transition text-sm">&gt;</button>
+                    </div>
+                  </div>
+                  {(() => {
+                    const ym = format(currentDate, 'yyyy-MM');
+                    const mb = bookings.filter(b => b.date.startsWith(ym));
+                    const bycat: Record<string, { count: number; pax: number }> = {};
+                    mb.forEach(b => { if (!bycat[b.category]) bycat[b.category] = { count: 0, pax: 0 }; bycat[b.category].count++; bycat[b.category].pax += b.pax; });
+                    const totalRev = Object.entries(bycat).reduce((s, [cat, d]) => s + d.pax * (programPrices[cat] || 0), 0);
+                    const totalPax = Object.values(bycat).reduce((s, d) => s + d.pax, 0);
+                    return (
+                      <table className="w-full text-left border-collapse text-sm">
+                        <thead><tr className="border-b-2 border-gray-100">
+                          <th className="pb-3 text-xs font-extrabold text-gray-400">프로그램</th>
+                          <th className="pb-3 text-xs font-extrabold text-gray-400 text-right">건수</th>
+                          <th className="pb-3 text-xs font-extrabold text-gray-400 text-right">인원</th>
+                          <th className="pb-3 text-xs font-extrabold text-gray-400 text-right">단가</th>
+                          <th className="pb-3 text-xs font-extrabold text-gray-400 text-right">매출</th>
+                        </tr></thead>
+                        <tbody>
+                          {Object.entries(bycat).map(([cat, d]) => (
+                            <tr key={cat} className="border-b border-gray-50">
+                              <td className="py-3 font-bold text-gray-800">{cat}</td>
+                              <td className="py-3 text-right text-gray-500">{d.count}건</td>
+                              <td className="py-3 text-right text-gray-500">{d.pax}명</td>
+                              <td className="py-3 text-right text-gray-400">{(programPrices[cat] || 0).toLocaleString()}원</td>
+                              <td className="py-3 text-right font-black text-blue-700">{(d.pax * (programPrices[cat] || 0)).toLocaleString()}원</td>
+                            </tr>
+                          ))}
+                          {Object.keys(bycat).length === 0 && <tr><td colSpan={5} className="py-8 text-center text-gray-400 text-sm">이 달의 예약이 없습니다.</td></tr>}
+                        </tbody>
+                        <tfoot><tr className="bg-blue-50 rounded-xl">
+                          <td className="py-3 px-2 font-extrabold text-blue-900">합계</td>
+                          <td className="py-3 text-right font-bold text-blue-900">{mb.length}건</td>
+                          <td className="py-3 text-right font-bold text-blue-900">{totalPax}명</td>
+                          <td className="py-3 text-right text-gray-400">-</td>
+                          <td className="py-3 px-2 text-right font-black text-blue-700 text-base">{totalRev.toLocaleString()}원</td>
+                        </tr></tfoot>
+                      </table>
+                    );
+                  })()}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Cancellation Tab */}
+        {pageTab === 'cancellation' && (
+          <div className="space-y-5">
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+              <h3 className="text-lg font-extrabold text-red-700 mb-4">🚫 취소 조회</h3>
+              {/* 조회 모드 선택 */}
+              <div className="flex gap-2 mb-4">
+                <button
+                  onClick={() => setCancelFilterMode('monthly')}
+                  className={`px-4 py-2 rounded-lg text-sm font-bold transition ${cancelFilterMode === 'monthly' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                >
+                  월별 조회
+                </button>
+                <button
+                  onClick={() => setCancelFilterMode('range')}
+                  className={`px-4 py-2 rounded-lg text-sm font-bold transition ${cancelFilterMode === 'range' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                >
+                  기간별 조회
+                </button>
+              </div>
+              {/* 필터 입력 */}
+              {cancelFilterMode === 'monthly' ? (
+                <div className="flex items-center gap-3 mb-5">
+                  <input
+                    type="month"
+                    value={cancelFilterMonth}
+                    onChange={e => setCancelFilterMonth(e.target.value)}
+                    className="border border-gray-200 rounded-xl px-4 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-red-400"
+                  />
+                  <span className="text-sm text-gray-400">월 취소 내역</span>
+                </div>
+              ) : (
+                <div className="flex flex-wrap items-center gap-3 mb-5">
+                  <input
+                    type="date"
+                    value={cancelFilterStart}
+                    onChange={e => setCancelFilterStart(e.target.value)}
+                    className="border border-gray-200 rounded-xl px-3 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-red-400"
+                  />
+                  <span className="text-gray-400 font-bold">~</span>
+                  <input
+                    type="date"
+                    value={cancelFilterEnd}
+                    min={cancelFilterStart}
+                    onChange={e => setCancelFilterEnd(e.target.value)}
+                    className="border border-gray-200 rounded-xl px-3 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-red-400"
+                  />
+                </div>
+              )}
+              {/* 취소 내역 목록 */}
+              {(() => {
+                const filtered = cancelledBookings.filter(b => {
+                  if (cancelFilterMode === 'monthly') {
+                    return b.date.startsWith(cancelFilterMonth);
+                  } else {
+                    if (!cancelFilterStart || !cancelFilterEnd) return true;
+                    return b.date >= cancelFilterStart && b.date <= cancelFilterEnd;
+                  }
+                }).sort((a, b) => (b.cancelledAt || b.date).localeCompare(a.cancelledAt || a.date));
+                if (filtered.length === 0) return (
+                  <div className="py-12 text-center text-gray-400">
+                    <div className="text-4xl mb-3">🔍</div>
+                    <p className="text-sm font-medium">해당 기간에 취소 내역이 없습니다.</p>
+                  </div>
+                );
+                return (
+                  <>
+                    <p className="text-xs text-gray-400 font-bold mb-3">총 {filtered.length}건</p>
+                    <div className="space-y-2">
+                      {filtered.map(b => (
+                        <div key={b.id} className="flex items-start gap-3 p-4 bg-red-50 rounded-xl border border-red-100">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
+                              <span className="text-xs text-red-400 font-bold">{b.date} {b.time}</span>
+                              <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-bold">{b.cancelReason || '취소'}</span>
+                              {b.cancelledAt && (
+                                <span className="text-xs text-gray-300">
+                                  취소일: {b.cancelledAt.slice(0, 10)}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-sm font-bold text-gray-800 mb-0.5">
+                              {b.name} · {b.category} · {b.pax}명
+                            </p>
+                            {b.phone && (
+                              <p className="text-xs text-gray-500 font-medium">📞 {b.phone}</p>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
                 );
               })()}
             </div>
