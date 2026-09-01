@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { onAuthStateChanged } from "firebase/auth";
+import { auth, getUserRole } from "@/lib/authService";
 
 const navItems = [
   { label: "프로그램", href: "/#diving" },
@@ -17,6 +19,14 @@ export default function Header() {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, async (user) => {
+      setIsAdmin(user ? (await getUserRole(user)) === "admin" : false);
+    });
+    return () => unsub();
+  }, []);
 
   if (pathname?.startsWith("/connect") || pathname?.startsWith("/manage-connect-secret")) {
     return null;
@@ -190,11 +200,20 @@ export default function Header() {
                   />
                 </Link>
               ))}
+              {isAdmin && (
+                <Link
+                  href="/admin/products"
+                  className="ml-6 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[12px] font-bold tracking-wide rounded-none transition-all duration-300 shadow-lg shadow-emerald-600/20"
+                  style={{ fontFamily: "'Noto Sans KR', sans-serif" }}
+                >
+                  상품등록
+                </Link>
+              )}
               <a
                 href="https://smartstore.naver.com/divershop"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="ml-6 px-6 py-2.5 bg-[#006BD6] hover:bg-[#004fa3] text-white text-[12px] font-bold tracking-widest uppercase rounded-none transition-all duration-300 shadow-lg shadow-blue-600/20"
+                className={`${isAdmin ? "ml-2" : "ml-6"} px-6 py-2.5 bg-[#006BD6] hover:bg-[#004fa3] text-white text-[12px] font-bold tracking-widest uppercase rounded-none transition-all duration-300 shadow-lg shadow-blue-600/20`}
                 style={{ fontFamily: "'Montserrat', sans-serif" }}
               >
                 NAVER BOOK
@@ -261,6 +280,15 @@ export default function Header() {
               <a href="http://pf.kakao.com/_Gjdbl/chat" target="_blank" rel="noopener noreferrer" className="hover:text-[#006BD6]">KAKAOTALK</a>
             </div>
             <div className="px-6 pt-4 pb-1 flex flex-col gap-2">
+              {isAdmin && (
+                <Link
+                  href="/admin/products"
+                  onClick={() => setIsOpen(false)}
+                  className="py-3 bg-emerald-600 text-white text-center text-sm font-bold tracking-wider"
+                >
+                  상품등록
+                </Link>
+              )}
               <a
                 href="https://smartstore.naver.com/divershop"
                 target="_blank"
