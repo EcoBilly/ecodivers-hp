@@ -1,6 +1,19 @@
 "use client";
 
-const panes = [
+import { useEffect, useState } from "react";
+import type { Product } from "@/lib/products";
+
+interface Card {
+  id?: string;
+  title: string;
+  en: string;
+  desc: string;
+  image: string;
+  price: string;
+  feature: boolean;
+}
+
+const FALLBACK: Card[] = [
   {
     title: "호핑투어",
     en: "HOPPING TOUR",
@@ -44,6 +57,32 @@ const panes = [
 ];
 
 export default function ProductPanes() {
+  const [cards, setCards] = useState<Card[]>(FALLBACK);
+
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/products")
+      .then((r) => r.json())
+      .then((data) => {
+        if (!alive || !Array.isArray(data?.programs) || data.programs.length === 0) return;
+        setCards(
+          (data.programs as Product[]).map((p) => ({
+            id: p.id,
+            title: p.title,
+            en: p.enTitle,
+            desc: p.summary,
+            image: p.mainImage || "/img/reef.jpg",
+            price: p.priceLabel,
+            feature: !!p.featured,
+          }))
+        );
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   return (
     <section id="diving" className="py-20 md:py-28 bg-white">
       <div className="max-w-[1200px] mx-auto px-4 md:px-6">
@@ -59,15 +98,14 @@ export default function ProductPanes() {
 
         {/* 모바일: 세로 스택 / 데스크톱: 3열 그리드 */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
-          {panes.map((p, i) => (
+          {cards.map((p, i) => (
             <a
-              key={i}
-              href="#booking"
-              className={`group relative flex flex-col overflow-hidden border border-[var(--line)] bg-white transition-colors hover:border-[#006BD6] ${
-                p.feature ? "sm:col-span-1 lg:row-span-1" : ""
-              }`}
+              key={p.id || i}
+              href={p.id ? `/product/${p.id}` : "#booking"}
+              className="group relative flex flex-col overflow-hidden border border-[var(--line)] bg-white transition-colors hover:border-[#006BD6]"
             >
               <div className="relative aspect-[16/10] overflow-hidden">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={p.image}
                   alt={p.title}
@@ -97,7 +135,7 @@ export default function ProductPanes() {
                     {p.price}
                   </span>
                   <span className="inline-flex items-center gap-1.5 text-xs font-black tracking-widest uppercase text-[#0b1b2b] group-hover:text-[#006BD6] transition-colors">
-                    예약하기
+                    {p.id ? "자세히 보기" : "예약하기"}
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
                     </svg>

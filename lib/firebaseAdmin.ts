@@ -54,3 +54,34 @@ export function getStorageAdmin(): admin.storage.Storage | null {
   if (!app) return null;
   return admin.storage(app);
 }
+
+export function getAuthAdmin(): admin.auth.Auth | null {
+  const app = getAdminApp();
+  if (!app) return null;
+  return app.auth();
+}
+
+/**
+ * Authorization: Bearer <idToken> 헤더를 검증하고, 해당 사용자가 admin 역할인지 확인한다.
+ * 성공 시 uid 반환, 실패 시 null.
+ */
+export async function verifyAdminRequest(req: Request): Promise<string | null> {
+  const authHeader = req.headers.get("authorization") || "";
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  if (!match) return null;
+
+  const authAdmin = getAuthAdmin();
+  const db = getDbAdmin();
+  if (!authAdmin || !db) return null;
+
+  try {
+    const decoded = await authAdmin.verifyIdToken(match[1]);
+    const userDoc = await db.collection("users").doc(decoded.uid).get();
+    if (userDoc.exists && userDoc.data()?.role === "admin") {
+      return decoded.uid;
+    }
+  } catch (e) {
+    console.error("[verifyAdminRequest] token verify failed:", e);
+  }
+  return null;
+}

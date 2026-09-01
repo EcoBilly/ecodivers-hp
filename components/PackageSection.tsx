@@ -1,10 +1,22 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import type { Product } from "@/lib/products";
+
 const NAVER = "https://smartstore.naver.com/divershop";
 
-const packages = [
+interface Pkg {
+  id?: string;
+  title: string;
+  subtitle: string;
+  price: string;
+  image: string;
+  tag: string;
+  highlight: boolean;
+}
+
+const FALLBACK: Pkg[] = [
   {
-    id: 1,
     title: "1인 투어 패키지",
     subtitle: "체험 + 제주 바다 전망 숙박 1박",
     price: "112,000",
@@ -13,7 +25,6 @@ const packages = [
     highlight: false,
   },
   {
-    id: 2,
     title: "커플 다이빙 패키지",
     subtitle: "2인 체험 + 호텔 1박 + 수중 사진 촬영",
     price: "177,000",
@@ -22,7 +33,6 @@ const packages = [
     highlight: true,
   },
   {
-    id: 3,
     title: "올인원 자격증 캠프",
     subtitle: "오픈워터 교육 + 숙박 3박 + 식사",
     price: "420,000",
@@ -40,6 +50,32 @@ const stats = [
 ];
 
 export default function PackageSection() {
+  const [packages, setPackages] = useState<Pkg[]>(FALLBACK);
+
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/products")
+      .then((r) => r.json())
+      .then((data) => {
+        if (!alive || !Array.isArray(data?.packages) || data.packages.length === 0) return;
+        setPackages(
+          (data.packages as Product[]).map((p) => ({
+            id: p.id,
+            title: p.title,
+            subtitle: p.summary,
+            price: p.priceLabel,
+            image: p.mainImage || "/img/turtle-surface.jpg",
+            tag: p.category,
+            highlight: !!p.highlight,
+          }))
+        );
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   return (
     <>
       {/* Stats */}
@@ -73,48 +109,61 @@ export default function PackageSection() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
-            {packages.map((pkg) => (
-              <div
-                key={pkg.id}
-                className={`flex flex-col bg-white border overflow-hidden ${
-                  pkg.highlight ? "border-[#006BD6] shadow-[0_20px_60px_-25px_rgba(0,107,214,0.5)]" : "border-[var(--line)]"
-                }`}
-              >
-                <div className="relative aspect-[16/10] overflow-hidden">
-                  <img src={pkg.image} alt={pkg.title} loading="lazy" className="w-full h-full object-cover" />
-                  <span
-                    className={`absolute top-3 left-3 text-[10px] font-black tracking-widest uppercase px-2.5 py-1 text-white ${
-                      pkg.highlight ? "bg-[#006BD6]" : "bg-[#0b1b2b]"
-                    }`}
-                    style={{ fontFamily: "'Montserrat', sans-serif" }}
-                  >
-                    {pkg.tag}
-                  </span>
-                </div>
-                <div className="flex flex-col flex-1 p-6">
-                  <h3 className="text-lg font-black text-[#0b1b2b] mb-1">{pkg.title}</h3>
-                  <p className="text-sm text-[var(--ink-soft)] mb-6">{pkg.subtitle}</p>
-                  <div className="mt-auto flex items-end justify-between pt-4 border-t border-[var(--line)]">
-                    <div>
-                      <div className="text-[10px] text-gray-400 mb-0.5">1인 기준</div>
-                      <div className="text-2xl font-black text-[#006BD6]" style={{ fontFamily: "'Montserrat', sans-serif" }}>
-                        {pkg.price}
-                        <span className="text-sm font-bold ml-1">원~</span>
+            {packages.map((pkg, i) => {
+              const href = pkg.id ? `/product/${pkg.id}` : NAVER;
+              const external = !pkg.id;
+              return (
+                <div
+                  key={pkg.id || i}
+                  className={`flex flex-col bg-white border overflow-hidden ${
+                    pkg.highlight
+                      ? "border-[#006BD6] shadow-[0_20px_60px_-25px_rgba(0,107,214,0.5)]"
+                      : "border-[var(--line)]"
+                  }`}
+                >
+                  <div className="relative aspect-[16/10] overflow-hidden">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={pkg.image} alt={pkg.title} loading="lazy" className="w-full h-full object-cover" />
+                    {pkg.tag ? (
+                      <span
+                        className={`absolute top-3 left-3 text-[10px] font-black tracking-widest uppercase px-2.5 py-1 text-white ${
+                          pkg.highlight ? "bg-[#006BD6]" : "bg-[#0b1b2b]"
+                        }`}
+                        style={{ fontFamily: "'Montserrat', sans-serif" }}
+                      >
+                        {pkg.tag}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="flex flex-col flex-1 p-6">
+                    <h3 className="text-lg font-black text-[#0b1b2b] mb-1">{pkg.title}</h3>
+                    <p className="text-sm text-[var(--ink-soft)] mb-6">{pkg.subtitle}</p>
+                    <div className="mt-auto flex items-end justify-between pt-4 border-t border-[var(--line)]">
+                      <div>
+                        <div className="text-[10px] text-gray-400 mb-0.5">1인 기준</div>
+                        <div
+                          className="text-2xl font-black text-[#006BD6]"
+                          style={{ fontFamily: "'Montserrat', sans-serif" }}
+                        >
+                          {pkg.price}
+                          <span className="text-sm font-bold ml-1">원~</span>
+                        </div>
                       </div>
+                      <a
+                        href={href}
+                        {...(external
+                          ? { target: "_blank", rel: "noopener noreferrer" }
+                          : {})}
+                        className="px-5 py-2.5 bg-[#0b1b2b] hover:bg-[#006BD6] text-white text-[11px] font-black tracking-widest uppercase transition-colors"
+                        style={{ fontFamily: "'Montserrat', sans-serif" }}
+                      >
+                        {external ? "예약" : "자세히"}
+                      </a>
                     </div>
-                    <a
-                      href={NAVER}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="px-5 py-2.5 bg-[#0b1b2b] hover:bg-[#006BD6] text-white text-[11px] font-black tracking-widest uppercase transition-colors"
-                      style={{ fontFamily: "'Montserrat', sans-serif" }}
-                    >
-                      예약
-                    </a>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </section>
