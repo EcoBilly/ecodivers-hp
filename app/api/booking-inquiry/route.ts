@@ -15,6 +15,71 @@ function clip(v: unknown, max: number): string {
   return String(v ?? "").trim().slice(0, max);
 }
 
+function escHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// 국내 번호 → tel: URI 용 정규화 (010-1234-5678 → +821012345678)
+function toTelUri(raw: string): string {
+  const digits = raw.replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.startsWith("82")) return `+${digits}`;
+  if (digits.startsWith("0")) return `+82${digits.slice(1)}`;
+  return `+${digits}`;
+}
+
+// 모바일 텔레그램이 자동 인식하기 쉬운 표기 (+82 10-1234-5678)
+function prettyPhone(raw: string): string {
+  const d = raw.replace(/\D/g, "");
+  if (/^01\d{8,9}$/.test(d)) {
+    const rest = d.slice(1);
+    const mid = rest.length === 10 ? rest.slice(1, 5) : rest.slice(1, 4);
+    const last = rest.slice(mid.length + 1);
+    return `+82 ${rest[0]}-${mid}-${last}`;
+  }
+  return raw;
+}
+
+interface SendResult {
+  chatId: string;
+  ok: boolean;
+}
+
+async function sendTo(
+  token: string,
+  chatId: string,
+  html: string,
+  plain: string
+): Promise<SendResult> {
+  const url = `https://${["api", "telegram", "org"].join(".")}/bot${token}/sendMessage`;
+  // 1) HTML(전화 링크 포함) 시도 → 2) 실패 시 일반 텍스트로 재시도
+  try {
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: html,
+        parse_mode: "HTML",
+        disable_web_page_preview: true,
+      }),
+    });
+    if (r.ok) return { chatId, ok: true };
+  } catch {
+    /* fall through */
+  }
+  try {
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, text: plain }),
+    });
+    return { chatId, ok: r.ok };
+  } catch {
+    return { chatId, ok: false };
+  }
+}
+
 async function resolveChatIds(): Promise<string[]> {
   const fromEnv =
     process.env.TELEGRAM_BOOKING_CHAT_IDS || process.env.TELEGRAM_ADMIN_CHAT_IDS;
@@ -99,33 +164,47 @@ export async function POST(req: Request) {
 
     lastHit.set(ip, now);
 
-    const lines = [
+    const tel = toTelUri(phone);
+    const phoneDisplay = prettyPhone(phone);
+
+    // HTML: 연락처를 탭하면 바로 전화 연결
+    const htmlLines = [
+      "🐚 <b>[홈페이지 예약 문의]</b>",
+      category ? `· 구분: ${escHtml(category)}` : "",
+      `· 프로그램: ${escHtml(product || "-")}`,
+      `· 희망 날짜: ${escHtml(date || "미정")}`,
+      `· 인원: ${escHtml(people || "-")}`,
+      `· 예약자: ${escHtml(name)}`,
+      tel
+        ? `· 연락처: <a href="tel:${tel}">${escHtml(phoneDisplay)}</a>`
+        : `· 연락처: ${escHtml(phone)}`,
+      "",
+      "확인 후 고객에게 연락 바랍니다.",
+    ].filter(Boolean);
+    const htmlMsg = htmlLines.join("\n");
+
+    // 일반 텍스트 폴백 (+82 표기 → 모바일 텔레그램에서 자동 통화 링크)
+    const plainMsg = [
       "🐚 [홈페이지 예약 문의]",
       category ? `· 구분: ${category}` : "",
       `· 프로그램: ${product || "-"}`,
       `· 희망 날짜: ${date || "미정"}`,
       `· 인원: ${people || "-"}`,
       `· 예약자: ${name}`,
-      `· 연락처: ${phone}`,
+      `· 연락처: ${phoneDisplay}`,
       "",
       "확인 후 고객에게 연락 바랍니다.",
-    ].filter(Boolean);
-    const msg = lines.join("\n");
+    ]
+      .filter(Boolean)
+      .join("\n");
 
-    const tgHost = ["api", "telegram", "org"].join(".");
-    const results = await Promise.allSettled(
+    const results = await Promise.all(
       chatIds.map((chatId) =>
-        fetch(`https://${tgHost}/bot${TELEGRAM_TOKEN}/sendMessage`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ chat_id: chatId, text: msg }),
-        }).then((r) => {
-          if (!r.ok) throw new Error(`TG ${r.status}`);
-        })
+        sendTo(TELEGRAM_TOKEN, chatId, htmlMsg, plainMsg)
       )
     );
 
-    const sent = results.filter((r) => r.status === "fulfilled").length;
+    const sent = results.filter((r) => r.ok).length;
     if (sent === 0) {
       return NextResponse.json({ error: "send_failed" }, { status: 502 });
     }
