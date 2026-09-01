@@ -4,10 +4,26 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Instagram, MessageCircle, Phone, MapPin, Mail } from "lucide-react";
 
-const footerLinks = {
-  서비스: ["체험다이빙", "해녀체험", "호핑투어", "펀다이빙", "교육/라이센스", "패키지"],
-  정보: ["에코다이버스 소개", "오시는 길", "이용약관", "개인정보처리방침"],
-  커뮤니티: ["다이빙 갤러리", "후기 게시판", "자주 묻는 질문"],
+const footerLinks: Record<string, { label: string; href: string }[]> = {
+  프로그램: [
+    { label: "호핑투어", href: "/#diving" },
+    { label: "해녀체험", href: "/#diving" },
+    { label: "체험다이빙", href: "/#diving" },
+    { label: "교육 · 라이센스", href: "/#diving" },
+    { label: "펀다이빙", href: "/#diving" },
+    { label: "패키지", href: "/#packages" },
+  ],
+  안내: [
+    { label: "에코다이버스 소개", href: "/#about" },
+    { label: "오시는 길", href: "/#contact" },
+    { label: "자주 묻는 질문", href: "/#faq" },
+    { label: "후기", href: "/#community" },
+  ],
+  예약: [
+    { label: "네이버 예약", href: "https://smartstore.naver.com/divershop" },
+    { label: "글로벌 예약", href: "/booking/qr" },
+    { label: "카카오톡 문의", href: "http://pf.kakao.com/_Gjdbl/chat" },
+  ],
 };
 
 export default function Footer() {
@@ -45,7 +61,7 @@ export default function Footer() {
               예약하기
             </a>
             <a
-              href="http://pf.kakao.com/_xgpxexnxj"
+              href="http://pf.kakao.com/_Gjdbl/chat"
               target="_blank"
               rel="noopener noreferrer"
               className="px-8 py-4 bg-transparent border-2 border-white text-white font-black text-sm tracking-widest uppercase hover:bg-white hover:text-[#006BD6] transition-all duration-300"
@@ -117,7 +133,7 @@ export default function Footer() {
                 <Instagram className="w-4 h-4 text-gray-500 group-hover:text-[#006BD6]" />
               </a>
               <a
-                href="http://pf.kakao.com/_xgpxexnxj"
+                href="http://pf.kakao.com/_Gjdbl/chat"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-10 h-10 border border-white/10 flex items-center justify-center hover:border-[#FEE500] hover:bg-[#FEE500]/10 transition-all duration-300 group"
@@ -150,12 +166,14 @@ export default function Footer() {
               </h4>
               <ul className="space-y-3">
                 {links.map((link) => (
-                  <li key={link}>
+                  <li key={link.label}>
                     <Link
-                      href="#"
+                      href={link.href}
+                      target={link.href.startsWith("http") ? "_blank" : undefined}
+                      rel={link.href.startsWith("http") ? "noopener noreferrer" : undefined}
                       className="text-gray-500 text-sm hover:text-white hover:pl-1 transition-all duration-200 block"
                     >
-                      {link}
+                      {link.label}
                     </Link>
                   </li>
                 ))}

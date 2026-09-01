@@ -5,12 +5,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const navItems = [
-  { label: "다이빙", href: "#diving" },
-  { label: "해양체험", href: "#experience" },
-  { label: "교육/자격증", href: "#education" },
-  { label: "패키지", href: "#packages" },
-  { label: "커뮤니티", href: "#community" },
-  { label: "에코소개", href: "#about" },
+  { label: "프로그램", href: "/#diving" },
+  { label: "패키지", href: "/#packages" },
+  { label: "후기", href: "/#community" },
+  { label: "자주 묻는 질문", href: "/#faq" },
+  { label: "오시는 길", href: "/#contact" },
   { label: "AI 사진보정", href: "/underwater-enhancer" },
 ];
 
@@ -111,7 +110,7 @@ export default function Header() {
               </a>
               <span className="hidden md:block opacity-30">|</span>
               <a
-                href="http://pf.kakao.com/_xgpxexnxj"
+                href="http://pf.kakao.com/_Gjdbl/chat"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="hidden md:block hover:text-[#006BD6] transition-colors py-1"
@@ -259,7 +258,7 @@ export default function Header() {
             <div className="px-6 pt-4 pb-3 flex gap-3 text-[11px] font-bold text-gray-400 border-b border-gray-50">
               <a href="https://www.instagram.com/ecodivers_jeju" target="_blank" rel="noopener noreferrer" className="hover:text-[#006BD6]">INSTAGRAM</a>
               <span className="opacity-30">|</span>
-              <a href="http://pf.kakao.com/_xgpxexnxj" target="_blank" rel="noopener noreferrer" className="hover:text-[#006BD6]">KAKAOTALK</a>
+              <a href="http://pf.kakao.com/_Gjdbl/chat" target="_blank" rel="noopener noreferrer" className="hover:text-[#006BD6]">KAKAOTALK</a>
             </div>
             <div className="px-6 pt-4 pb-1 flex flex-col gap-2">
               <a
@@ -291,10 +290,10 @@ export default function Header() {
         </div>
       </header>
 
-      {/* Floating Action Buttons */}
-      <div className="fixed right-4 bottom-6 z-40 flex flex-col gap-3">
+      {/* Floating Action Buttons (데스크톱 전용 — 모바일은 하단 예약 바 사용) */}
+      <div className="hidden lg:flex fixed right-4 bottom-6 z-40 flex-col gap-3">
         <a
-          href="http://pf.kakao.com/_xgpxexnxj"
+          href="http://pf.kakao.com/_Gjdbl/chat"
           target="_blank"
           rel="noopener noreferrer"
           className="w-11 h-11 md:w-12 md:h-12 bg-[#FEE500] rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-transform"

@@ -12,6 +12,14 @@
   --teal: #00b4d8;
   --font-ko: 'Noto Sans KR', sans-serif;
   --font-en: 'Montserrat', sans-serif;
+
+  /* ── Redesign 2026 palette ── */
+  --ink: #0b1b2b;          /* near-black navy for headings */
+  --ink-soft: #33495c;     /* body text on light */
+  --line: #e7ebf0;         /* hairline borders */
+  --surface: #f4f6f9;      /* light section background */
+  --brand: #006BD6;
+  --brand-ink: #00457f;
 }
 
 @theme inline {
@@ -283,3 +291,40 @@ body {
     --foreground: #1a1a1a;
   }
 }
+
+/* ─── Redesign 2026 helpers ─── */
+
+/* hide scrollbar for horizontal snap rails (mobile service cards) */
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* sticky mobile action bar spacing (respects iOS safe area) */
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+body.has-mobile-bar { padding-bottom: 64px; }
+@media (min-width: 1024px) { body.has-mobile-bar { padding-bottom: 0; } }
+
+/* accordion */
+.acc-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.acc-panel.open { grid-template-rows: 1fr; }
+.acc-panel > div { overflow: hidden; }
+
+/* 고정 헤더 아래로 앵커가 가려지지 않도록 */
+section[id],
+[id="booking"] {
+  scroll-margin-top: 96px;
+}
+
+/* fluid display type — bold & confident like the reference sites */
+.display-xl { font-family: var(--font-ko); font-weight: 900; line-height: 1.04; letter-spacing: -0.02em; font-size: clamp(2.5rem, 7vw, 5.5rem); }
+.display-lg { font-family: var(--font-ko); font-weight: 900; line-height: 1.1; letter-spacing: -0.02em; font-size: clamp(2rem, 5vw, 3.5rem); }
+.eyebrow { font-family: var(--font-en); font-weight: 700; font-size: 0.72rem; letter-spacing: 0.35em; text-transform: uppercase; color: var(--brand); }
+
+@keyframes fadeUpSoft {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.reveal { animation: fadeUpSoft 0.7s cubic-bezier(0.22, 1, 0.36, 1) both; }

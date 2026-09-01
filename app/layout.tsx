@@ -3,6 +3,7 @@ import "./globals.css";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import ChatbotWidget from "@/components/ChatbotWidget";
+import MobileBookingBar from "@/components/MobileBookingBar";
 
 export const metadata: Metadata = {
   title: "에코다이버스 | 제주 스쿠버 다이빙·프리다이빙·해녀체험 전문",
@@ -51,6 +52,7 @@ export default function RootLayout({
         <Header />
         {children}
         <ChatbotWidget />
+        <MobileBookingBar />
         <Footer />
       </body>
     </html>

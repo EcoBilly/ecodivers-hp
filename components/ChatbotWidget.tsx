@@ -115,7 +115,7 @@ const SYSTEM_PROMPT = `당신은 제주도 다이빙 센터 '에코다이버스'
 [센터 정보]
 - 위치: 제주특별자치도 서귀포시 칠십리로 145
 - 연락처: 010-7414-3373
-- 카카오톡: http://pf.kakao.com/_xgpxexnxj
+- 카카오톡: http://pf.kakao.com/_Gjdbl/chat
 - 인스타그램: @ecodivers_jeju
 
 [운영 프로그램]
@@ -256,7 +256,7 @@ export default function ChatbotWidget() {
       {/* 챗봇 열기 버튼 */}
       <button
         onClick={() => setIsOpen(true)}
-        className={`fixed left-4 bottom-6 z-40 w-14 h-14 rounded-full shadow-xl flex items-center justify-center transition-all duration-300 ${
+        className={`fixed left-4 bottom-[76px] lg:bottom-6 z-40 w-12 h-12 lg:w-14 lg:h-14 rounded-full shadow-xl flex items-center justify-center transition-all duration-300 ${
           isOpen ? "opacity-0 pointer-events-none scale-75" : "opacity-100 scale-100"
         } bg-gradient-to-br from-blue-500 to-blue-700 hover:from-blue-600 hover:to-blue-800`}
         title="AI 상담"
