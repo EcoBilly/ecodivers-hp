@@ -24,7 +24,7 @@ const nextConfig: NextConfig = {
       "img-src 'self' data: blob: https://firebasestorage.googleapis.com https://*.paypal.com https://*.paypalobjects.com",
       "media-src 'self' blob:",
       "connect-src 'self' https://*.firebaseio.com https://*.googleapis.com https://identitytoolkit.googleapis.com wss://*.firebaseio.com https://*.paypal.com",
-      "frame-src 'self' https://www.sandbox.paypal.com https://www.paypal.com",
+      "frame-src 'self' https://www.sandbox.paypal.com https://www.paypal.com https://www.google.com https://maps.google.com",
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",
