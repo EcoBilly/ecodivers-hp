@@ -594,11 +594,11 @@ function Editor({
         </div>
 
         <div className="space-y-3">
-          {value.detailBlocks.length === 0 && (
-            <p className="text-xs text-gray-400">
-              상세 페이지에 들어갈 이미지/문단을 추가하세요. 순서대로 표시됩니다.
-            </p>
-          )}
+          <p className="text-xs text-gray-400">
+            상세 페이지에 들어갈 이미지/문단을 추가하세요. 순서대로 표시됩니다.
+            이미지는 <b>가로 860px</b>(네이버 상세페이지 규격) 권장 — 그대로 이어붙여
+            표시되고 모바일에서는 화면폭에 맞게 자동 축소됩니다.
+          </p>
           {value.detailBlocks.map((b, i) => (
             <div key={i} className="border border-gray-200 rounded-lg p-3">
               <div className="flex items-center justify-between mb-2">

@@ -90,28 +90,31 @@ export default async function ProductDetailPage({
         </section>
       )}
 
-      {/* Detail blocks */}
+      {/* Detail blocks — 네이버 상세페이지(가로 860px) 이미지를 그대로 사용 */}
       {product.detailBlocks.length > 0 && (
-        <section className="max-w-[820px] mx-auto px-4 md:px-6 py-12 md:py-16">
-          {product.detailBlocks.map((block, i) =>
-            block.type === "image" ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                key={i}
-                src={block.value}
-                alt=""
-                loading="lazy"
-                className="w-full mb-4 last:mb-0"
-              />
-            ) : (
-              <p
-                key={i}
-                className="text-[15px] md:text-base text-[var(--ink-soft)] leading-loose whitespace-pre-wrap mb-6 last:mb-0"
-              >
-                {block.value}
-              </p>
-            )
-          )}
+        <section className="py-12 md:py-16">
+          {/* 데스크톱: 최대 860px 중앙정렬 / 모바일: 화면폭에 맞춰 축소 */}
+          <div className="mx-auto w-full max-w-[860px]">
+            {product.detailBlocks.map((block, i) =>
+              block.type === "image" ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  key={i}
+                  src={block.value}
+                  alt=""
+                  loading="lazy"
+                  className="block w-full align-top"
+                />
+              ) : (
+                <p
+                  key={i}
+                  className="text-[15px] md:text-base text-[var(--ink-soft)] leading-loose whitespace-pre-wrap px-4 py-6"
+                >
+                  {block.value}
+                </p>
+              )
+            )}
+          </div>
         </section>
       )}
 
