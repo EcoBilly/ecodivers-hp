@@ -11,7 +11,6 @@ const footerLinks: Record<string, { label: string; href: string }[]> = {
     { label: "체험다이빙", href: "/#diving" },
     { label: "교육 · 라이센스", href: "/#diving" },
     { label: "펀다이빙", href: "/#diving" },
-    { label: "패키지", href: "/#packages" },
   ],
   안내: [
     { label: "에코다이버스 소개", href: "/#about" },

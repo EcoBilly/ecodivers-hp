@@ -8,7 +8,6 @@ import { auth, getUserRole } from "@/lib/authService";
 
 const navItems = [
   { label: "프로그램", href: "/#diving" },
-  { label: "패키지", href: "/#packages" },
   { label: "후기", href: "/#community" },
   { label: "자주 묻는 질문", href: "/#faq" },
   { label: "오시는 길", href: "/#contact" },
