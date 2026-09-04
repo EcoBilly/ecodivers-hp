@@ -100,7 +100,7 @@ export default function AdminSchedulePage() {
     return {};
   });
   const [cancelModal, setCancelModal] = useState<{ booking: Booking } | null>(null);
-  const [cancelReason, setCancelReason] = useState('고객변심');
+  const [cancelReason, setCancelReason] = useState('천재지변');
   const [rescheduleMode, setRescheduleMode] = useState(false);
   const [rescheduleData, setRescheduleData] = useState({ date: '', category: '', time: '' });
   const [formEndDate, setFormEndDate] = useState(''); // 날짜 범위 등록용 종료일
@@ -326,7 +326,7 @@ export default function AdminSchedulePage() {
     setEditingBooking({
       id: "new",
       name: "",
-      pax: 1,
+      pax: 0,
       category: defaultCat,
       date: dateStr,
       time: getTimeOptions(defaultCat)[0],
@@ -1324,7 +1324,7 @@ export default function AdminSchedulePage() {
                   setSummaryModal(null);
                   const defaultCat = categories[0];
                   setEditingBooking({
-                    id: 'new', name: '', pax: 1, category: defaultCat,
+                    id: 'new', name: '', pax: 0, category: defaultCat,
                     date: dateStr, time: getTimeOptions(defaultCat)[0],
                     checkedIn: false, phone: '', memo: '', paymentMethod: paymentOptions[0]
                   });
@@ -1345,7 +1345,7 @@ export default function AdminSchedulePage() {
                   setSummaryModal(null);
                   const defaultCat = categories[0];
                   setEditingBooking({
-                    id: 'new', name: '', pax: 1, category: defaultCat,
+                    id: 'new', name: '', pax: 0, category: defaultCat,
                     date: dateStr, time: getTimeOptions(defaultCat)[0],
                     checkedIn: false, phone: '', memo: '', paymentMethod: paymentOptions[0]
                   });
@@ -1371,11 +1371,13 @@ export default function AdminSchedulePage() {
           <div className="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl shadow-2xl flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
             {/* 헤더 */}
             <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100 flex-shrink-0">
-              <div>
-                <p className="text-xs text-gray-400 font-medium">{selectedDate || editingBooking.date}</p>
+              <div className="flex items-baseline gap-2">
                 <h3 className="text-lg font-extrabold text-blue-900">
                   {modalTab === 'list' ? '당일 예약 현황' : (editingBooking.id === 'new' ? '신규 일정 추가' : '일정 수정')}
                 </h3>
+                <p className="text-lg font-extrabold text-blue-900">
+                  {(() => { const d = selectedDate || editingBooking.date; return d ? format(new Date(d + 'T00:00:00'), 'yyyy-MM-dd (EEE)', { locale: ko }) : ''; })()}
+                </p>
               </div>
               <button onClick={() => setIsModalOpen(false)} className="w-8 h-8 rounded-full hover:bg-gray-100 text-gray-400 text-xl flex items-center justify-center">×</button>
             </div>
@@ -1420,7 +1422,7 @@ export default function AdminSchedulePage() {
                           <span className="text-gray-300">›</span>
                         </div>
                       ))}
-                      <button onClick={() => { const dc = categories[0]; setEditingBooking({id:'new',name:'',pax:1,category:dc,date:selectedDate||editingBooking.date,time:getTimeOptions(dc)[0],checkedIn:false,phone:'',memo:'',paymentMethod:paymentOptions[0]}); setIsCustomTimeMode(false); setIsCustomCategoryMode(false); setIsCustomPaymentMode(false); setModalTab('form'); }}
+                      <button onClick={() => { const dc = categories[0]; setEditingBooking({id:'new',name:'',pax:0,category:dc,date:selectedDate||editingBooking.date,time:getTimeOptions(dc)[0],checkedIn:false,phone:'',memo:'',paymentMethod:paymentOptions[0]}); setIsCustomTimeMode(false); setIsCustomCategoryMode(false); setIsCustomPaymentMode(false); setModalTab('form'); }}
                         className="w-full py-3 border-2 border-dashed border-blue-200 text-blue-600 text-sm font-bold rounded-xl hover:bg-blue-50 transition">
                         + 신규 일정 추가
                       </button>
@@ -1507,15 +1509,15 @@ export default function AdminSchedulePage() {
                       <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-blue-500">
                         <button
                           type="button"
-                          onClick={() => setEditingBooking({...editingBooking, pax: Math.max(1, editingBooking.pax - 1)})}
+                          onClick={() => setEditingBooking({...editingBooking, pax: Math.max(0, editingBooking.pax - 1)})}
                           className="px-3 py-2.5 bg-gray-50 hover:bg-gray-100 text-gray-600 font-bold text-lg leading-none transition select-none flex-shrink-0"
                           aria-label="인원 감소"
                         >−</button>
                         <input
                           type="number"
-                          min="1"
+                          min="0"
                           value={editingBooking.pax}
-                          onChange={e => setEditingBooking({...editingBooking, pax: parseInt(e.target.value) || 1})}
+                          onChange={e => setEditingBooking({...editingBooking, pax: Math.max(0, parseInt(e.target.value) || 0)})}
                           onFocus={e => e.target.select()}
                           className="flex-1 min-w-0 text-center text-sm p-2.5 outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                         />
@@ -1575,11 +1577,11 @@ export default function AdminSchedulePage() {
                 {editingBooking.id !== 'new' && (
                   <>
                     <button onClick={handleDelete} disabled={isSaving} className="px-4 py-3 bg-red-50 hover:bg-red-100 text-red-600 font-bold rounded-xl transition text-sm">삭제</button>
-                    <button onClick={() => { setCancelReason('고객변심'); setRescheduleMode(false); setRescheduleData({ date: editingBooking.date, category: editingBooking.category, time: editingBooking.time }); setCancelModal({ booking: editingBooking }); }} disabled={isSaving} className="px-4 py-3 bg-orange-50 hover:bg-orange-100 text-orange-600 font-bold rounded-xl transition text-sm">일정취소</button>
+                    <button onClick={() => { setCancelReason('천재지변'); setRescheduleMode(false); setRescheduleData({ date: editingBooking.date, category: editingBooking.category, time: editingBooking.time }); setCancelModal({ booking: editingBooking }); }} disabled={isSaving} className="px-4 py-3 bg-orange-50 hover:bg-orange-100 text-orange-600 font-bold rounded-xl transition text-sm">일정취소</button>
                   </>
                 )}
                 <button onClick={() => editingBooking.id !== 'new' ? setModalTab('list') : setIsModalOpen(false)} disabled={isSaving} className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition text-sm">취소</button>
-                <button onClick={handleSave} disabled={isSaving} className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-extrabold rounded-xl transition disabled:opacity-50 text-sm">{isSaving ? '저장 중...' : '저장'}</button>
+                <button onClick={handleSave} disabled={isSaving || editingBooking.pax === 0} className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-extrabold rounded-xl transition disabled:opacity-50 text-sm">{isSaving ? '저장 중...' : '저장'}</button>
               </div>
             )}
           </div>
